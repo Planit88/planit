@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Planit — Discover Ireland</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
+<style>
+  :root{
+    --ink:#1B2420; --ink-2:#243029; --ink-soft:rgba(244,239,227,0.68);
+    --paper:#F4EFE3; --paper-2:#EAE2CE;
+    --amber:#C97D2C; --amber-dark:#A7651E; --moss:#3C5A45;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; margin:0; padding:0;}
+  html,body{height:100%; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--ink); color:var(--paper); overflow:hidden;}
+
+  #app{position:relative; width:100vw; height:100vh; height:100dvh; display:flex; flex-direction:column;}
+
+  /* Header */
+  header{flex:0 0 auto; background:var(--ink); padding:10px 16px 10px; border-bottom:1px solid rgba(244,239,227,0.1); z-index:30;}
+  .brand{display:flex; align-items:center; gap:10px;}
+
+  /* Chips */
+  .chips{display:flex; gap:6px; overflow-x:auto; padding:9px 16px 11px; flex:0 0 auto; background:var(--ink); border-bottom:1px solid rgba(244,239,227,0.1); z-index:30; scrollbar-width:none;}
+  .chips::-webkit-scrollbar{display:none;}
+  .chip{flex:0 0 auto; padding:6px 12px; border-radius:20px; border:1px solid rgba(244,239,227,0.22); background:transparent; color:var(--paper); font-size:12px; font-weight:500; white-space:nowrap; cursor:pointer; display:flex; align-items:center; gap:5px;}
+  .chip .dot{width:7px; height:7px; border-radius:50%;}
+  .chip.active{background:var(--paper); color:var(--ink); border-color:var(--paper); font-weight:700;}
+
+  /* Map */
+  #mapWrap{position:relative; flex:1 1 auto; min-height:0;}
+  #map{position:absolute; inset:0;}
+  .maplibregl-ctrl-attrib{font-size:10px !important;}
+
+  /* View toggle */
+  .viewToggle{position:absolute; top:14px; right:14px; z-index:25; background:var(--paper); border-radius:8px; display:flex; overflow:hidden; box-shadow:0 3px 10px rgba(0,0,0,0.3);}
+  .viewToggle button{border:none; background:transparent; padding:8px 12px; font-size:12px; font-weight:700; color:var(--ink); cursor:pointer; font-family:inherit;}
+  .viewToggle button.active{background:var(--ink); color:var(--paper);}
+
+  /* Add banner */
+  .addBanner{position:absolute; top:14px; left:50%; transform:translateX(-50%); background:var(--amber); color:#fff; padding:9px 16px; border-radius:8px; font-size:13px; font-weight:600; z-index:28; box-shadow:0 3px 10px rgba(0,0,0,0.35); display:none; align-items:center; gap:8px; white-space:nowrap;}
+  .addBanner.show{display:flex;}
+  .addBanner button{background:rgba(255,255,255,0.25); border:none; color:#fff; border-radius:5px; padding:3px 8px; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit;}
+
+  /* FAB */
+  .fab{position:absolute; bottom:20px; right:18px; z-index:27; background:var(--amber); color:#fff; border:none; border-radius:30px; padding:13px 18px; font-size:14px; font-weight:700; font-family:inherit; box-shadow:0 4px 14px rgba(0,0,0,0.4); cursor:pointer; display:flex; align-items:center; gap:7px;}
+  .fab:active{background:var(--amber-dark);}
+  .fab.cancel{background:var(--ink-2); border:1px solid rgba(244,239,227,0.3);}
+
+  /* Sheet */
+  .sheetOverlay{position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:40; display:none;}
+  .sheetOverlay.show{display:block;}
+  .sheet{position:fixed; left:0; right:0; bottom:0; z-index:41; background:var(--paper); color:var(--ink); border-radius:18px 18px 0 0; max-height:90vh; overflow-y:auto; padding:16px 18px 28px; transform:translateY(100%); transition:transform 0.25s ease; box-shadow:0 -6px 24px rgba(0,0,0,0.4);}
+  .sheet.show{transform:translateY(0);}
+  .sheetHandle{width:36px; height:4px; background:rgba(27,36,32,0.18); border-radius:3px; margin:0 auto 14px;}
+  .sheet h2{font-size:17px; margin:0 0 4px; font-weight:800; text-transform:uppercase; letter-spacing:0.03em;}
+  .coords{font-size:11px; font-family:ui-monospace,monospace; color:#6b7670; margin-bottom:14px;}
+
+  /* Form fields */
+  .field{margin-bottom:13px;}
+  .field label{display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#5a655e; margin-bottom:5px;}
+  .field input[type=text], .field textarea{width:100%; border:1px solid rgba(27,36,32,0.18); border-radius:8px; padding:10px 11px; font-family:inherit; font-size:14px; background:#fff; color:var(--ink);}
+  .field textarea{resize:vertical; min-height:58px;}
+
+  .typeGrid{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .typeOpt{border:1.5px solid rgba(27,36,32,0.18); border-radius:8px; padding:9px 10px; display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:600;}
+  .typeOpt .dot{width:10px; height:10px; border-radius:50%; flex:0 0 auto;}
+  .typeOpt.selected{border-color:var(--ink); background:var(--paper-2);}
+
+  .costRow{display:flex; gap:8px;}
+  .costOpt{flex:1; border:1.5px solid rgba(27,36,32,0.18); border-radius:8px; padding:9px; text-align:center; font-size:13px; font-weight:600; cursor:pointer;}
+  .costOpt.selected{border-color:var(--ink); background:var(--paper-2);}
+
+  .amenities{display:flex; flex-wrap:wrap; gap:7px;}
+  .amenity{border:1.5px solid rgba(27,36,32,0.18); border-radius:20px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;}
+  .amenity.selected{background:var(--moss); color:#fff; border-color:var(--moss);}
+
+  /* Stars */
+  .starsRow{display:flex; gap:6px;}
+  .starBtn{font-size:26px; background:none; border:none; cursor:pointer; padding:2px; line-height:1; color:#ccc; transition:color 0.1s;}
+  .starBtn.active{color:#C97D2C;}
+
+  /* Privacy notice */
+  .privacyNote{background:rgba(27,36,32,0.06); border-radius:8px; padding:10px 12px; font-size:11.5px; color:#5a655e; line-height:1.5; margin-bottom:14px; border-left:3px solid var(--moss);}
+
+  .saveBtn{width:100%; background:var(--ink); color:var(--paper); border:none; border-radius:10px; padding:13px; font-size:14px; font-weight:700; font-family:inherit; margin-top:4px; cursor:pointer;}
+  .saveBtn:disabled{opacity:0.4;}
+
+  /* Detail sheet */
+  .ticket{color:var(--ink);}
+  .ttype{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; padding:3px 8px; border-radius:12px; color:#fff; margin-bottom:8px;}
+  .ticket h3{font-size:19px; font-weight:800; margin-bottom:7px; line-height:1.2;}
+  .ticket .tnotes{font-size:13px; color:#4b5650; line-height:1.45; margin-bottom:9px;}
+  .ticket .divider{height:1px; background:repeating-linear-gradient(90deg,rgba(27,36,32,0.2) 0 5px,transparent 5px 10px); margin:9px 0;}
+  .ticket .amlist{display:flex; flex-wrap:wrap; gap:5px; margin-bottom:9px;}
+  .ticket .amlist span{font-size:10.5px; background:var(--paper-2); padding:3px 7px; border-radius:10px; font-weight:600; color:#3a443e;}
+  .ticket .tcost{font-size:12px; font-weight:700; color:var(--moss); margin-bottom:4px;}
+  .ticket .tcoords{font-size:10.5px; color:#8a948d; font-family:ui-monospace,monospace; margin-bottom:10px;}
+  .ticket .trating{font-size:20px; margin-bottom:12px; letter-spacing:2px;}
+  .ticket .tratingcount{font-size:11px; color:#8a948d; margin-left:4px;}
+  .directionsBtn{display:block; background:var(--moss); color:#fff; text-align:center; padding:11px; border-radius:9px; font-size:13px; font-weight:700; text-decoration:none; letter-spacing:0.02em; margin-bottom:10px;}
+  .directionsBtn:active{opacity:0.85;}
+  .rateSection{margin-top:10px;}
+  .rateSection label{display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#5a655e; margin-bottom:6px;}
+  .rateStarsRow{display:flex; gap:6px; margin-bottom:8px;}
+  .rateStarBtn{font-size:28px; background:none; border:none; cursor:pointer; padding:2px; line-height:1; color:#ccc; transition:color 0.1s;}
+  .rateStarBtn.active{color:#C97D2C;}
+  .submitRatingBtn{width:100%; background:var(--ink); color:var(--paper); border:none; border-radius:9px; padding:11px; font-size:13px; font-weight:700; font-family:inherit; cursor:pointer;}
+  .deleteBtn{display:block; background:transparent; color:#c0392b; border:1.5px solid #c0392b; text-align:center; padding:10px; border-radius:9px; font-size:13px; font-weight:700; font-family:inherit; width:100%; margin-top:8px; cursor:pointer;}
+  .deleteBtn:active{background:#fdf0ef;}
+  .adminLoginBtn{display:block; background:transparent; color:#8a948d; border:1px solid rgba(27,36,32,0.15); text-align:center; padding:8px; border-radius:9px; font-size:12px; font-weight:600; font-family:inherit; width:100%; margin-top:6px; cursor:pointer;}
+  .adminLoginBtn.admin-active{color:var(--moss); border-color:var(--moss);}
+
+  /* Favourites */
+  .heartBtn{display:flex; align-items:center; justify-content:center; gap:6px; background:transparent; border:1.5px solid rgba(27,36,32,0.18); border-radius:9px; padding:10px; font-size:13px; font-weight:700; font-family:inherit; width:100%; margin-bottom:8px; cursor:pointer; color:var(--ink);}
+  .heartBtn.hearted{background:#fff0f0; border-color:#e74c3c; color:#e74c3c;}
+  .heartBtn .hicon{font-size:16px; line-height:1;}
+
+  /* Reviews */
+  .reviewsSection{margin-top:14px;}
+  .reviewsSection .rlabel{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#5a655e; margin-bottom:8px; display:block;}
+  .reviewItem{background:var(--paper-2); border-radius:8px; padding:10px 12px; margin-bottom:7px; position:relative;}
+  .reviewItem .rtext{font-size:13px; color:var(--ink); line-height:1.45; margin-bottom:4px;}
+  .reviewItem .rmeta{font-size:10.5px; color:#8a948d;}
+  .reviewItem .rdelete{position:absolute; top:8px; right:8px; background:none; border:none; font-size:14px; cursor:pointer; color:#c0392b; padding:2px 6px;}
+  .writeReviewBox{margin-top:8px;}
+  .writeReviewBox textarea{width:100%; border:1px solid rgba(27,36,32,0.18); border-radius:8px; padding:9px 11px; font-family:inherit; font-size:13px; background:#fff; color:var(--ink); resize:none; height:70px;}
+  .writeReviewBox .charCount{font-size:10.5px; color:#8a948d; text-align:right; margin-top:3px; margin-bottom:6px;}
+  .submitReviewBtn{width:100%; background:var(--ink); color:var(--paper); border:none; border-radius:9px; padding:10px; font-size:13px; font-weight:700; font-family:inherit; cursor:pointer;}
+  .submitReviewBtn:disabled{opacity:0.4;}
+  .reviewedMsg{font-size:12px; color:var(--moss); font-weight:700; text-align:center; padding:6px 0;}
+  #appFooter{flex:0 0 auto; background:var(--ink); border-top:1px solid rgba(244,239,227,0.08); padding:8px 16px; text-align:center; z-index:30;}
+  #appFooter a{font-size:11px; color:var(--ink-soft); text-decoration:none; border-bottom:1px solid rgba(244,239,227,0.2);}
+  #appFooter a:hover{color:var(--paper);}
+
+  /* List view */
+  #listView{flex:1 1 auto; min-height:0; background:var(--ink); z-index:15; overflow-y:auto; padding:14px 16px 100px; display:none;}
+  #listView.show{display:block;}
+  .listCard{background:var(--paper); color:var(--ink); border-radius:12px; padding:14px; margin-bottom:12px;}
+  .listCard .ttype{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; padding:3px 8px; border-radius:12px; color:#fff; margin-bottom:7px;}
+  .listCard h3{font-size:16px; font-weight:800; margin-bottom:5px;}
+  .listCard .lmeta{font-size:11px; color:#6b7670; font-family:ui-monospace,monospace; margin-bottom:7px;}
+  .listCard .lnotes{font-size:12.5px; color:#3a443e; line-height:1.45; margin-bottom:8px;}
+  .listCard .amlist{display:flex; flex-wrap:wrap; gap:5px; margin-bottom:8px;}
+  .listCard .amlist span{font-size:10.5px; background:var(--paper-2); padding:3px 7px; border-radius:10px; font-weight:600; color:#3a443e;}
+  .listCard .lrating{font-size:16px; margin-bottom:6px;}
+  .listCard .directionsBtn{display:block; background:var(--moss); color:#fff; text-align:center; padding:10px; border-radius:8px; font-size:12.5px; font-weight:700; text-decoration:none;}
+  .listEmpty{color:var(--ink-soft); font-size:13px; text-align:center; margin-top:60px; line-height:1.5;}
+  .listEmpty .t{font-size:16px; font-weight:800; color:var(--paper); margin-bottom:6px;}
+
+  /* Loading */
+  /* Clusters */
+  .clusterMarker{display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--ink);color:var(--paper);font-weight:800;font-family:inherit;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.35);border:2.5px solid var(--paper);}
+  .clusterMarker.sm{width:34px;height:34px;font-size:12px;}
+  .clusterMarker.md{width:42px;height:42px;font-size:13px;}
+  .clusterMarker.lg{width:52px;height:52px;font-size:15px;}
+
+  .loadingBadge{position:absolute; top:14px; left:14px; z-index:25; background:var(--paper); color:var(--ink); font-size:11px; font-weight:600; padding:6px 10px; border-radius:8px; display:none;}
+  .loadingBadge.show{display:block;}
+
+  /* Firebase config banner */
+  #firebaseBanner{position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:100; display:flex; align-items:center; justify-content:center; padding:20px;}
+  #firebaseBanner.hidden{display:none;}
+  .fbCard{background:var(--paper); color:var(--ink); border-radius:16px; padding:22px 20px; max-width:380px; width:100%;}
+  .fbCard h2{font-size:17px; font-weight:800; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.03em;}
+  .fbCard p{font-size:13px; color:#4b5650; line-height:1.5; margin-bottom:12px;}
+  .fbCard a{color:var(--moss); font-weight:700;}
+  .fbCard textarea{width:100%; border:1px solid rgba(27,36,32,0.18); border-radius:8px; padding:9px 10px; font-family:ui-monospace,monospace; font-size:11px; background:#fff; color:var(--ink); min-height:100px; resize:vertical; margin-bottom:10px;}
+  .fbCard .fbSave{width:100%; background:var(--ink); color:var(--paper); border:none; border-radius:9px; padding:12px; font-size:14px; font-weight:700; font-family:inherit; cursor:pointer;}
+  .fbCard .fbSkip{width:100%; background:transparent; color:#6b7670; border:none; padding:10px; font-size:13px; font-family:inherit; cursor:pointer; margin-top:4px;}
+</style>
+</head>
+<body>
+
+<!-- Firebase setup banner (shown until configured) -->
+<div id="firebaseBanner">
+  <div class="fbCard">
+    <img src="data:image/png;base64,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" alt="Planit" style="width:80px;height:80px;object-fit:contain;display:block;margin:0 auto 12px;"/>
+    <h2>Connect your database</h2>
+    <p>To share spots between all users on Planit, paste your Firebase config below. <a href="https://console.firebase.google.com/" target="_blank">Create a free Firebase project →</a><br><br>
+    In Firebase Console: Create project → Web app → Copy the <code>firebaseConfig</code> object.</p>
+    <textarea id="fbConfigInput" placeholder='{
+  "apiKey": "...",
+  "authDomain": "...",
+  "projectId": "...",
+  "storageBucket": "...",
+  "messagingSenderId": "...",
+  "appId": "..."
+}'></textarea>
+    <button class="fbSave" onclick="saveFirebaseConfig()">Connect Firebase</button>
+    <button class="fbSkip" onclick="skipFirebase()">Skip for now (spots saved locally only)</button>
+  </div>
+</div>
+
+<div id="app">
+  <header>
+    <div class="brand">
+      <img src="data:image/png;base64,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" alt="Planit" style="height:42px;width:42px;object-fit:contain;border-radius:8px;"/>
+      <div style="display:flex;flex-direction:column;justify-content:center;margin-left:2px;">
+        <span style="font-size:20px;font-weight:800;text-transform:lowercase;letter-spacing:0.02em;color:var(--paper);line-height:1.1;">plan<span style="color:#6BBF8E;">it</span></span>
+        <span style="font-size:11px;color:var(--ink-soft);margin-top:1px;">Campervan Parking Locator</span>
+      </div>
+      <span class="count" id="countLabel" style="margin-left:auto;">0 spots</span>
+    </div>
+  </header>
+
+  <div class="chips" id="chips"></div>
+  <div class="chips" id="starChips" style="padding-top:0; border-top:none;"></div>
+
+  <div id="mapWrap">
+    <div id="map"></div>
+    <div class="viewToggle">
+      <button id="toMap" class="active">Map</button>
+      <button id="toList">List</button>
+    </div>
+    <div class="loadingBadge" id="loadingBadge">Loading spots…</div>
+    <div class="addBanner" id="addBanner">
+      Tap the map to place a pin
+      <button id="cancelAdd">Cancel</button>
+    </div>
+    <button class="fab" id="fab">+ Add spot</button>
+  </div>
+
+  <div id="listView"></div>
+  <footer id="appFooter">
+    <a href="privacy.html" target="_blank">Privacy Policy</a>
+  </footer>
+</div>
+
+<!-- Add spot sheet -->
+<div class="sheetOverlay" id="addOverlay"></div>
+<div class="sheet" id="addSheet">
+  <div class="sheetHandle"></div>
+  <h2>Log this spot</h2>
+  <div class="coords" id="coordsLabel">--</div>
+
+  <div class="field">
+    <label>Name</label>
+    <input type="text" id="fName" placeholder="e.g. Clifden Quay car park" maxlength="80" />
+  </div>
+  <div class="field">
+    <label>Type</label>
+    <div class="typeGrid" id="typeGrid"></div>
+  </div>
+  <div class="field">
+    <label>Cost</label>
+    <div class="costRow" id="costRow">
+      <div class="costOpt" data-cost="free">Free</div>
+      <div class="costOpt" data-cost="paid">Paid</div>
+      <div class="costOpt" data-cost="unknown">Not sure</div>
+    </div>
+  </div>
+  <div class="field">
+    <label>Your Rating</label>
+    <div class="starsRow" id="starsRow"></div>
+  </div>
+  <div class="field">
+    <label>Amenities</label>
+    <div class="amenities" id="amenities"></div>
+  </div>
+  <div class="field">
+    <label>Notes</label>
+    <textarea id="fNotes" placeholder="Surface, noise, views, height barriers, anything useful." maxlength="300"></textarea>
+  </div>
+
+  <div class="privacyNote">
+    🔒 <strong>Privacy notice:</strong> The location, name and notes you enter will be visible to everyone who uses Planit. Do not enter personal information or the exact location of private property.
+  </div>
+
+  <button class="saveBtn" id="saveBtn" disabled>Save spot</button>
+</div>
+
+<!-- Detail sheet -->
+<div class="sheetOverlay" id="detailOverlay"></div>
+<div class="sheet" id="detailSheet" style="max-height:80vh;">
+  <div class="sheetHandle"></div>
+  <div id="detailContent"></div>
+  <button class="saveBtn" id="detailCloseBtn" style="background:var(--ink-2); margin-top:10px;">Close</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ── Config ──────────────────────────────────────────────────────────────────
+
+  var TYPES = {
+    site:    {label:"Site",    color:"#2A6F77", letter:"🏕"},
+    pub:     {label:"Pub",     color:"#7B3F00", letter:"🍺"},
+    parking: {label:"Parking", color:"#5C6B73", letter:"🅿"},
+    other:   {label:"Other",   color:"#3C5A45", letter:"📍"}
+  };
+  var AMENITIES = [
+    {key:"water",    label:"Water fill"},
+    {key:"waste",    label:"Waste disposal"},
+    {key:"electric", label:"Electric hookup"},
+    {key:"toilets",  label:"Toilets"},
+    {key:"showers",  label:"Showers"},
+    {key:"wifi",     label:"WiFi"},
+    {key:"food",     label:"Food served"},
+    {key:"dogs",     label:"Dog friendly"}
+  ];
+  // Admin mode — activated via secret URL: ?admin
+  // e.g. https://planit88.github.io/planit/?admin
+  var ADMIN_PASSWORD = "planit2024admin"; // ← change this to your own password
+  var isAdmin = false;
+
+  function checkAdminUrl(){
+    if(window.location.search.includes('admin')){
+      var pw = prompt('Enter admin password:');
+      if(pw === ADMIN_PASSWORD){
+        isAdmin = true;
+        window.history.replaceState({}, '', window.location.pathname);
+        console.log('Admin mode active');
+      } else if(pw !== null){
+        alert('Incorrect password.');
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+  }
+  checkAdminUrl();
+
+  var LOCAL_KEY  = "parkedup-spots-v2";
+  var LOCAL_VER  = "parkedup-data-version";
+  var DATA_VERSION = "2"; // bump this when seed data changes
+  var FB_KEY     = "parkedup-firebase-config";
+  var FAV_KEY    = "parkedup-favourites";
+  var REVIEWS_KEY= "parkedup-reviews";
+
+  // Session tracking — spots added this session can be deleted by owner
+  var sessionSpotIds = {};
+
+  // Favourites — stored locally per device
+  var favourites = {};
+  try { favourites = JSON.parse(localStorage.getItem(FAV_KEY) || '{}'); } catch(e){}
+
+  // Reviews — stored locally, will sync to Firebase when connected
+  var reviews = {};
+  try { reviews = JSON.parse(localStorage.getItem(REVIEWS_KEY) || '{}'); } catch(e){}
+
+  function saveFavourites(){ try{ localStorage.setItem(FAV_KEY, JSON.stringify(favourites)); }catch(e){} }
+  function saveReviews(){ try{ localStorage.setItem(REVIEWS_KEY, JSON.stringify(reviews)); }catch(e){} }
+
+  var spots       = [];
+  var activeFilter= "all";
+  var minStars    = 0; // 0 = no star filter
+  var addMode     = false;
+  var pendingLng  = 0, pendingLat = 0;
+  var selectedType= "site";
+  var selectedCost= "free";
+  var selectedAmenities = {};
+  var selectedRating = 0;
+  var mapMarkers  = {};
+  var useFirebase = false;
+  var db          = null;
+
+  // ── Firebase ─────────────────────────────────────────────────────────────
+
+  function saveFirebaseConfig(){
+    var raw = document.getElementById('fbConfigInput').value.trim();
+    try {
+      var cfg = JSON.parse(raw);
+      if(!cfg.apiKey) throw new Error('missing apiKey');
+      localStorage.setItem(FB_KEY, JSON.stringify(cfg));
+      initFirebase(cfg);
+    } catch(e) {
+      alert('Invalid config — make sure you paste the full JSON object from Firebase.\n\n' + e.message);
+    }
+  }
+  window.saveFirebaseConfig = saveFirebaseConfig;
+
+  function skipFirebase(){
+    document.getElementById('firebaseBanner').classList.add('hidden');
+    loadLocalSpots();
+  }
+  window.skipFirebase = skipFirebase;
+
+  function initFirebase(cfg){
+    // Dynamically load Firebase SDK
+    var s1 = document.createElement('script');
+    s1.src = 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js';
+    s1.onload = function(){
+      var s2 = document.createElement('script');
+      s2.src = 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js';
+      s2.onload = function(){
+        try {
+          if(!firebase.apps.length) firebase.initializeApp(cfg);
+          db = firebase.firestore();
+          useFirebase = true;
+          document.getElementById('firebaseBanner').classList.add('hidden');
+          loadFirebaseSpots();
+        } catch(e){
+          alert('Firebase connection failed: ' + e.message);
+          skipFirebase();
+        }
+      };
+      document.head.appendChild(s2);
+    };
+    s1.onerror = function(){
+      alert('Could not load Firebase — using local storage instead.');
+      skipFirebase();
+    };
+    document.head.appendChild(s1);
+  }
+
+  function loadFirebaseSpots(){
+    document.getElementById('loadingBadge').classList.add('show');
+    db.collection('spots').orderBy('addedAt','desc').get()
+      .then(function(snap){
+        spots = [];
+        snap.forEach(function(doc){
+          spots.push(Object.assign({id: doc.id}, doc.data()));
+        });
+        // also load reviews from Firebase
+        return db.collection('reviews').get().then(function(rsnap){
+          rsnap.forEach(function(doc){
+            reviews[doc.id] = doc.data().reviews || [];
+          });
+        });
+      })
+      .then(function(){ render(); })
+      .catch(function(e){ console.error(e); loadLocalSpots(); })
+      .finally(function(){ document.getElementById('loadingBadge').classList.remove('show'); });
+  }
+
+  function saveToFirebase(spot){
+    if(!db) return Promise.reject('no db');
+    return db.collection('spots').doc(spot.id).set(spot);
+  }
+
+  function updateRatingInFirebase(spotId, newAvg, newCount){
+    if(!db) return Promise.resolve();
+    return db.collection('spots').doc(spotId).update({
+      ratingAvg: newAvg, ratingCount: newCount
+    });
+  }
+
+  // ── Local storage fallback ────────────────────────────────────────────────
+
+  function loadLocalSpots(){
+    document.getElementById('loadingBadge').classList.add('show');
+    try {
+      var raw = localStorage.getItem(LOCAL_KEY);
+      var savedVersion = localStorage.getItem(LOCAL_VER);
+      spots = raw ? JSON.parse(raw) : [];
+
+      // If no spots or data version is outdated, merge seed spots in
+      if(spots.length === 0 || savedVersion !== DATA_VERSION){
+        var seeds = seedSpots();
+        var existingIds = {};
+        spots.forEach(function(s){ existingIds[s.id] = true; });
+        // add seed spots that don't already exist
+        seeds.forEach(function(s){
+          if(!existingIds[s.id]) spots.push(s);
+        });
+        localStorage.setItem(LOCAL_VER, DATA_VERSION);
+        saveLocalSpots();
+      }
+    } catch(e){
+      spots = seedSpots();
+      saveLocalSpots();
+    }
+    document.getElementById('loadingBadge').classList.remove('show');
+    render();
+  }
+
+  function saveLocalSpots(){
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(spots)); } catch(e){}
+  }
+
+  function seedSpots(){
+    var now = Date.now();
+    return [{"id":"osm-ie-0000","name":"Keel Camping, Achill Island","type":"site","cost":"paid","lat":53.9743,"lng":-10.0805,"notes":"Expansive site on shores of Keel Strand with views of Minaun Cliffs. Recently renovated showers and kitchen. Shop and laundry on site.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Mayo","addedAt":1782167299303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0001","name":"Belleek Park Caravan & Camping","type":"site","cost":"paid","lat":54.1138,"lng":-9.1523,"notes":"Family friendly park in Ballina with full facilities. Activity base for Mayo.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Mayo","addedAt":1782167298303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0002","name":"Cong Caravan & Camping Park","type":"site","cost":"paid","lat":53.5399,"lng":-9.2735,"notes":"Peaceful rural park within 1 mile of Cong village, beside Lough Corrib.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Mayo","addedAt":1782167297303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0003","name":"Westport House Camping","type":"site","cost":"paid","lat":53.7958,"lng":-9.5283,"notes":"Scenic site within the Westport House estate grounds. Walking distance to Westport town.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Mayo","addedAt":1782167296303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0004","name":"Parkland Caravan & Camping, Claremorris","type":"site","cost":"paid","lat":53.7211,"lng":-8.9877,"notes":"Central Mayo location, good base for exploring Connacht.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Mayo","addedAt":1782167295303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0005","name":"Clifden Eco Beach Camping","type":"site","cost":"paid","lat":53.5237,"lng":-10.1338,"notes":"Award-winning eco site on the Wild Atlantic Way near Clifden. Beach access and stunning views.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Galway","addedAt":1782167294303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0006","name":"Salthill Caravan Park, Galway","type":"site","cost":"paid","lat":53.2602,"lng":-9.0805,"notes":"On the shores of Galway Bay. Walking distance to Salthill promenade and Galway city.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Galway","addedAt":1782167293303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0007","name":"Oughterard Caravan & Camping","type":"site","cost":"paid","lat":53.4282,"lng":-9.3234,"notes":"Quiet site on the shores of Lough Corrib. Gateway to Connemara.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Galway","addedAt":1782167292303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0008","name":"Lough Key Caravan & Camping","type":"site","cost":"paid","lat":53.9544,"lng":-8.1644,"notes":"Beautiful forest park setting on the shores of Lough Key. Excellent facilities and activities.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Roscommon","addedAt":1782167291303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0009","name":"Knocknarea Caravan & Camping","type":"site","cost":"paid","lat":54.2455,"lng":-8.5811,"notes":"Base for Knocknarea Mountain and Strandhill beach. Good facilities.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Sligo","addedAt":1782167290303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0010","name":"Strandhill Camping","type":"site","cost":"paid","lat":54.2703,"lng":-8.5954,"notes":"Close to Strandhill beach and surfing. Pub and restaurants nearby.","amenities":["water","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Sligo","addedAt":1782167289303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0011","name":"Rosses Point Caravan Park","type":"site","cost":"paid","lat":54.3088,"lng":-8.5706,"notes":"Coastal park at Rosses Point with beach access and views of Benbulben.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Sligo","addedAt":1782167288303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0012","name":"Camac Valley Tourist Caravan & Camping","type":"site","cost":"paid","lat":53.3075,"lng":-6.3971,"notes":"Closest campsite to Dublin city centre. Well-run site with full facilities. Bus to city centre.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Dublin","addedAt":1782167287303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0013","name":"The Hideaway Camping, Cork","type":"site","cost":"paid","lat":51.8928,"lng":-8.4621,"notes":"Popular site near Cork city with excellent amenities.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Cork","addedAt":1782167286303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0014","name":"Eagle Point Caravan & Camping","type":"site","cost":"paid","lat":51.7012,"lng":-9.4876,"notes":"Right on the water in west Cork. Great for kayaking and swimming.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Cork","addedAt":1782167285303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0015","name":"Barleycove Beach Camping","type":"site","cost":"paid","lat":51.4724,"lng":-9.7441,"notes":"Near the beautiful Barleycove beach on the Mizen Peninsula. Stunning location.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Cork","addedAt":1782167284303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0016","name":"Mannix Point Camping, Cahersiveen","type":"site","cost":"paid","lat":51.9497,"lng":-10.2267,"notes":"Quirky, artistic site on the Ring of Kerry run by Mortimer Moriarty. Unique atmosphere.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167283303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0017","name":"Beara Camping, Castletownbere","type":"site","cost":"paid","lat":51.6509,"lng":-9.9049,"notes":"Simple site on the Beara Peninsula. Wild Atlantic scenery.","amenities":["water","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167282303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0018","name":"Fossa Caravan & Camping, Killarney","type":"site","cost":"paid","lat":52.0388,"lng":-9.5554,"notes":"Well-located site near Killarney National Park. Good base for the Ring of Kerry.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167281303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0019","name":"Anchor Caravan Park, Caherdaniel","type":"site","cost":"paid","lat":51.7589,"lng":-10.0411,"notes":"Beautiful coastal location on Derrynane Bay. Access to beach.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167280303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0020","name":"Waterville Caravan & Camping","type":"site","cost":"paid","lat":51.8264,"lng":-10.1736,"notes":"Seafront location in Waterville village on the Ring of Kerry.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167279303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0021","name":"Ballinskelligs Caravan & Camping","type":"site","cost":"paid","lat":51.8289,"lng":-10.2689,"notes":"Remote coastal site near Ballinskelligs beach and Skellig views on clear days.","amenities":["water","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167278303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0022","name":"Doonbeg Strand Camping","type":"site","cost":"paid","lat":52.7292,"lng":-9.5264,"notes":"Small dog-friendly site on Doonbeg Bay. 18 pitches with EHU. Wild Atlantic Way location.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Clare","addedAt":1782167277303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0023","name":"Lahinch Caravan & Camping","type":"site","cost":"paid","lat":52.9329,"lng":-9.3396,"notes":"Walking distance to Lahinch beach and village. Near Cliffs of Moher.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Clare","addedAt":1782167276303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0024","name":"Doolin Camping","type":"site","cost":"paid","lat":53.0199,"lng":-9.3764,"notes":"Gateway to the Cliffs of Moher and Aran Islands ferry. Traditional music village nearby.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Clare","addedAt":1782167275303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0025","name":"Kilkee Caravan & Camping","type":"site","cost":"paid","lat":52.683,"lng":-9.6415,"notes":"By the horseshoe bay at Kilkee. Beach access and good town facilities.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Clare","addedAt":1782167274303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0026","name":"Adare Camping & Caravan","type":"site","cost":"paid","lat":52.5657,"lng":-8.7899,"notes":"Peaceful site near the beautiful village of Adare. Base for touring Limerick.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Limerick","addedAt":1782167273303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0027","name":"Powers the Pot, Clonmel","type":"site","cost":"paid","lat":52.4069,"lng":-7.8253,"notes":"Beside the Comeragh Mountains near Clonmel. Good base for walking holidays.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Tipperary","addedAt":1782167272303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0028","name":"Dunmore East Holiday Resort","type":"site","cost":"paid","lat":52.1507,"lng":-6.9986,"notes":"Activities including swimming, tennis and kayaking. Coastal village location.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Waterford","addedAt":1782167271303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0029","name":"Morriscastle Beach Camping","type":"site","cost":"paid","lat":52.5301,"lng":-6.3098,"notes":"Beside one of Wexford's beautiful Blue Flag beaches. 1 minute walk to the sand.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Wexford","addedAt":1782167270303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0030","name":"Ferrybank Caravan & Camping","type":"site","cost":"paid","lat":52.3445,"lng":-6.4592,"notes":"Open all year. Well-located site near Wexford town.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Wexford","addedAt":1782167269303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0031","name":"Parklands Caravan & Camping, Gorey","type":"site","cost":"paid","lat":52.6759,"lng":-6.2928,"notes":"Good base for exploring Wexford's coastline and heritage.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Wexford","addedAt":1782167268303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0032","name":"Brittas Bay Caravan Park","type":"site","cost":"paid","lat":52.8733,"lng":-6.0933,"notes":"Next to the popular Brittas Bay beach. Busy in summer, beautiful location.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Wicklow","addedAt":1782167267303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0033","name":"Wolohan's Silver Strand","type":"site","cost":"paid","lat":52.9548,"lng":-6.0167,"notes":"Clifftop site south of Wicklow Town with direct Silver Strand beach access.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Wicklow","addedAt":1782167266303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0034","name":"Lough Dan Camping","type":"site","cost":"paid","lat":53.0474,"lng":-6.2701,"notes":"Beautifully situated in the Wicklow Mountains beside Lough Dan. Basic but stunning.","amenities":["water","toilets"],"ratingAvg":0,"ratingCount":0,"county":"Wicklow","addedAt":1782167265303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0035","name":"Portrane Beach Camping","type":"site","cost":"paid","lat":53.4961,"lng":-6.1149,"notes":"Award-winning family park on the Fingal coastline north of Dublin. Hard standing and grass pitches.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Dublin","addedAt":1782167264303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0036","name":"Parson's Green Caravan & Camping","type":"site","cost":"paid","lat":52.7903,"lng":-6.1612,"notes":"Open all year. Pleasant site near Arklow.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Wicklow","addedAt":1782167263303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0037","name":"Lough Rynn Caravan & Camping","type":"site","cost":"paid","lat":53.9345,"lng":-7.9456,"notes":"Idyllic setting on the shores of Lough Rynn. Castle and gardens nearby.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Leitrim","addedAt":1782167262303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0038","name":"Shepherd's Rest, Sperrin Mountains","type":"site","cost":"paid","lat":54.8102,"lng":-7.0344,"notes":"Pub and campsite in the Sperrin AONB. Dog-friendly, great craic. Derry and Giant's Causeway within an hour.","amenities":["water","electric","toilets","showers","wifi","dogs","food"],"ratingAvg":0,"ratingCount":0,"county":"Tyrone","addedAt":1782167261303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0039","name":"Bush Caravan Park, Bushmills","type":"site","cost":"paid","lat":55.2043,"lng":-6.5209,"notes":"North Coast location near Giant's Causeway, Bushmills Distillery and Carrick-a-Rede rope bridge.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Antrim","addedAt":1782167260303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0040","name":"Ballyness Caravan Park","type":"site","cost":"paid","lat":55.2052,"lng":-6.5318,"notes":"Ideal for family trips along the Causeway Coast. Award-winning facilities.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Antrim","addedAt":1782167259303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0041","name":"Killybegs Holiday Park","type":"site","cost":"paid","lat":54.6347,"lng":-8.4404,"notes":"Open all year. Fishing village location on the Wild Atlantic Way.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167258303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0042","name":"Streamstown Caravan & Camping","type":"site","cost":"paid","lat":54.6762,"lng":-8.2541,"notes":"Open all year. Near Ballyshannon and Bundoran surf beach.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167257303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0043","name":"Portsalon Caravan Park","type":"site","cost":"paid","lat":55.1889,"lng":-7.6342,"notes":"On Lough Swilly with beach access. Wild Donegal scenery.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167256303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0044","name":"Magheroarty Caravan Park","type":"site","cost":"paid","lat":55.1478,"lng":-8.1748,"notes":"Remote coastal site near Tory Island ferry. Off the beaten track.","amenities":["water","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167255303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0045","name":"Rossnowlagh Camping","type":"site","cost":"paid","lat":54.5449,"lng":-8.2184,"notes":"Near Rossnowlagh beach, one of Donegal's finest surf beaches.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167254303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0046","name":"Desert House Caravan & Camping","type":"site","cost":"paid","lat":51.6534,"lng":-8.6289,"notes":"Open all year. Rural Cork location near Clonakilty.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Cork","addedAt":1782167253303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0047","name":"Sexton's Caravan & Camping","type":"site","cost":"paid","lat":52.8892,"lng":-8.9745,"notes":"Open all year. Good base for touring the Burren and Clare coast.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Clare","addedAt":1782167252303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0048","name":"Riverside Farm Marina & Caravan","type":"site","cost":"paid","lat":53.4268,"lng":-7.9401,"notes":"Open all year. On the River Shannon near Athlone. Fishing and boating nearby.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Westmeath","addedAt":1782167251303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0049","name":"The Shepherds Rest Campsite","type":"site","cost":"paid","lat":53.5213,"lng":-7.7856,"notes":"Open all year. Countryside Ireland Hidden Heartlands location.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Westmeath","addedAt":1782167250303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0050","name":"Clifden Town Motorhome Stopover","type":"site","cost":"paid","lat":53.4887,"lng":-9.9978,"notes":"Designated motorhome stopover in Clifden town. Electric hookup and waste disposal. Walking distance to shops and restaurants.","amenities":["water","waste","electric"],"ratingAvg":0,"ratingCount":0,"county":"Galway","addedAt":1782167249303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0051","name":"Westport Motorhome Parking","type":"site","cost":"paid","lat":53.7987,"lng":-9.5224,"notes":"Dedicated motorhome parking area in Westport. Near town centre amenities.","amenities":["water","waste"],"ratingAvg":0,"ratingCount":0,"county":"Mayo","addedAt":1782167248303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0052","name":"Kenmare Motorhome Stopover","type":"site","cost":"paid","lat":51.8813,"lng":-9.5822,"notes":"Town centre motorhome stopover with services. Good base for the Ring of Kerry and Beara Peninsula.","amenities":["water","waste","electric"],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167247303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0053","name":"Dingle Motorhome Parking","type":"site","cost":"paid","lat":52.1447,"lng":-10.2606,"notes":"Motorhome parking near Dingle town centre. Beautiful Dingle Peninsula location.","amenities":["water","waste"],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167246303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0054","name":"Donegal Town Motorhome Stopover","type":"site","cost":"paid","lat":54.6549,"lng":-8.1128,"notes":"Motorhome aire in Donegal town. Walking distance to castle and town centre.","amenities":["water","waste","electric"],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167245303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0055","name":"Bundoran Motorhome Parking","type":"site","cost":"free","lat":54.4776,"lng":-8.2793,"notes":"Motorhome parking near Bundoran seafront. Surf beach and town amenities nearby.","amenities":["water","waste"],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167244303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0056","name":"Kilkenny Motorhome Stopover","type":"site","cost":"paid","lat":52.6536,"lng":-7.2524,"notes":"Designated motorhome parking near Kilkenny city. Walking distance to the castle and medieval mile.","amenities":["water","waste","electric"],"ratingAvg":0,"ratingCount":0,"county":"Kilkenny","addedAt":1782167243303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0057","name":"Waterford City Motorhome Parking","type":"site","cost":"paid","lat":52.2593,"lng":-7.1101,"notes":"Motorhome parking near Waterford quays. Access to Viking Triangle and city centre.","amenities":["water","waste"],"ratingAvg":0,"ratingCount":0,"county":"Waterford","addedAt":1782167242303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0058","name":"Galway City Salthill Motorhome","type":"site","cost":"paid","lat":53.2589,"lng":-9.0784,"notes":"Motorhome stopover in Salthill with sea views. Easy access to Galway city.","amenities":["water","waste","electric"],"ratingAvg":0,"ratingCount":0,"county":"Galway","addedAt":1782167241303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0059","name":"Sligo Town Motorhome Stopover","type":"site","cost":"paid","lat":54.2688,"lng":-8.4761,"notes":"Town centre motorhome area in Sligo. Near Yeats country and Benbulben.","amenities":["water","waste","electric"],"ratingAvg":0,"ratingCount":0,"county":"Sligo","addedAt":1782167240303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0060","name":"Horn Head, Dunfanaghy","type":"site","cost":"free","lat":55.2042,"lng":-7.9522,"notes":"Wild Atlantic Way spectacular headland. No facilities but outstanding views. Arrive late, leave early. Narrow road.","amenities":[],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167239303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0061","name":"Mullaghderg Beach, Dungloe","type":"site","cost":"free","lat":54.9903,"lng":-8.3541,"notes":"Beautiful sandy beach overnight parking. Note: unsafe for swimming due to currents. Remote and peaceful.","amenities":[],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167238303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0062","name":"Silver Strand Beach, Malin Beg","type":"site","cost":"free","lat":54.6741,"lng":-8.7634,"notes":"Pristine beach with possibility to swim. Village of Glencolmcille 100m away. Sheep may wander nearby.","amenities":[],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167237303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0063","name":"Carrigafoyle Castle Parking","type":"site","cost":"free","lat":52.5699,"lng":-9.4951,"notes":"Quiet parking near historic castle at Ballylongford. Peaceful and within walking distance of the ruins.","amenities":[],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167236303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0064","name":"Hook Lighthouse Parking","type":"site","cost":"free","lat":52.125,"lng":-6.9301,"notes":"Spacious overnight parking at one of the world's oldest lighthouses. Sea views, daytime cafe and toilets accessible.","amenities":["toilets"],"ratingAvg":0,"ratingCount":0,"county":"Wexford","addedAt":1782167235303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0065","name":"St Mullins, River Barrow","type":"site","cost":"free","lat":52.4878,"lng":-6.9296,"notes":"Rural riverside location on the Barrow. Swimming, fishing and walking. Nearby cafe. Quiet and scenic.","amenities":[],"ratingAvg":0,"ratingCount":0,"county":"Carlow","addedAt":1782167234303,"source":"Camping Ireland / OSM"}];
+  }
+
+  // ── App init ──────────────────────────────────────────────────────────────
+
+  var savedCfg = null;
+  try { savedCfg = JSON.parse(localStorage.getItem(FB_KEY) || 'null'); } catch(e){}
+
+  if(savedCfg && savedCfg.apiKey){
+    document.getElementById('firebaseBanner').classList.add('hidden');
+    initFirebase(savedCfg);
+  }
+  // else banner stays visible until user acts
+
+  // ── Map ───────────────────────────────────────────────────────────────────
+
+  var map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://tiles.openfreemap.org/styles/liberty',
+    center: [-8.0, 53.35],
+    zoom: 6.5,
+    attributionControl: true
+  });
+
+  map.addControl(new maplibregl.NavigationControl({showCompass:false}), 'bottom-left');
+
+  map.on('click', function(e){
+    if(!addMode) return;
+    // don't fire if clicking a cluster
+    if(e.originalEvent && e.originalEvent.target && e.originalEvent.target.closest && e.originalEvent.target.closest('.clusterMarker')) return;
+    pendingLng = e.lngLat.lng;
+    pendingLat = e.lngLat.lat;
+    exitAddMode();
+    openAddSheet();
+  });
+
+  // ── Markers & Clustering ──────────────────────────────────────────────────
+  // Pure HTML marker approach — no GeoJSON source dependency, fully reliable
+
+  var mapReady = false;
+  var clusterEls = [];
+
+  map.on('load', function(){
+    mapReady = true;
+    if(spots.length) rebuildMarkers();
+  });
+
+  // Rebuild clusters after any map movement (pan or zoom settles)
+  map.on('moveend', function(){ if(mapReady) rebuildMarkers(); });
+
+  function makeMarkerEl(spot){
+    var t = TYPES[spot.type] || TYPES.site;
+    var isHighlyRated = spot.ratingAvg >= 4 && spot.ratingCount >= 1;
+    var pinColor = isHighlyRated ? '#D4AC0D' : t.color;
+    var label = isHighlyRated ? '★' : t.letter;
+    var isEmoji = label !== '★';
+    var fontSize = isEmoji ? '12px' : '16px';
+    var topOffset = isEmoji ? '5px' : '4px';
+    var el = document.createElement('div');
+    el.style.cssText = 'width:30px;height:38px;position:relative;cursor:pointer;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.35));';
+    el.innerHTML = '<svg viewBox="0 0 30 38" width="30" height="38"><path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 23 15 23s15-12.5 15-23C30 6.7 23.3 0 15 0z" fill="'+ pinColor +'"/></svg>' +
+      '<div style="position:absolute;top:'+topOffset+';left:0;right:0;text-align:center;font-size:'+fontSize+';line-height:1;font-family:inherit;">'+ label +'</div>';
+    return el;
+  }
+
+  function makeClusterEl(count, coords){
+    var size = count < 5 ? 'sm' : count < 15 ? 'md' : 'lg';
+    var el = document.createElement('div');
+    el.className = 'clusterMarker ' + size;
+    el.textContent = count;
+    el.addEventListener('click', function(e){
+      e.stopPropagation();
+      map.easeTo({center: coords, zoom: map.getZoom() + 2.5, duration: 400});
+    });
+    return el;
+  }
+
+  function clusterSpots(spotsArr, pixelRadius){
+    // simple grid-based clustering based on current map projection
+    var clusters = [];
+    var assigned = {};
+    spotsArr.forEach(function(s, i){
+      if(assigned[i]) return;
+      var px = map.project([s.lng, s.lat]);
+      var group = [s];
+      assigned[i] = true;
+      spotsArr.forEach(function(s2, j){
+        if(i === j || assigned[j]) return;
+        var px2 = map.project([s2.lng, s2.lat]);
+        var dx = px.x - px2.x, dy = px.y - px2.y;
+        if(Math.sqrt(dx*dx + dy*dy) < pixelRadius){
+          group.push(s2);
+          assigned[j] = true;
+        }
+      });
+      // centroid
+      var clat = group.reduce(function(a,b){ return a+b.lat; }, 0) / group.length;
+      var clng = group.reduce(function(a,b){ return a+b.lng; }, 0) / group.length;
+      clusters.push({spots: group, lat: clat, lng: clng});
+    });
+    return clusters;
+  }
+
+  function rebuildMarkers(){
+    // Remove all existing markers
+    Object.values(mapMarkers).forEach(function(m){ m.remove(); });
+    mapMarkers = {};
+    clusterEls.forEach(function(m){ m.remove(); });
+    clusterEls = [];
+
+    var fs = filteredSpots();
+    if(!fs.length) return;
+
+    var zoom = map.getZoom();
+    var pixelRadius = zoom < 8 ? 60 : zoom < 10 ? 45 : zoom < 12 ? 30 : 0;
+
+    if(pixelRadius > 0){
+      var clusters = clusterSpots(fs, pixelRadius);
+      clusters.forEach(function(c){
+        if(c.spots.length === 1){
+          // single pin
+          var s = c.spots[0];
+          var el = makeMarkerEl(s);
+          el.addEventListener('click', function(e){ e.stopPropagation(); openDetail(s.id); });
+          var m = new maplibregl.Marker({element:el}).setLngLat([s.lng, s.lat]).addTo(map);
+          mapMarkers[s.id] = m;
+        } else {
+          // cluster bubble
+          var el = makeClusterEl(c.spots.length, [c.lng, c.lat]);
+          var m = new maplibregl.Marker({element:el}).setLngLat([c.lng, c.lat]).addTo(map);
+          clusterEls.push(m);
+        }
+      });
+    } else {
+      // fully zoomed in — show all individual pins
+      fs.forEach(function(s){
+        var el = makeMarkerEl(s);
+        el.addEventListener('click', function(e){ e.stopPropagation(); openDetail(s.id); });
+        var m = new maplibregl.Marker({element:el}).setLngLat([s.lng, s.lat]).addTo(map);
+        mapMarkers[s.id] = m;
+      });
+    }
+  }
+
+  function updateMarkerVisibility(){
+    // markers are always visible when added — nothing to hide
+  }
+
+  function safeRebuild(){
+    if(!mapReady) return;
+    rebuildMarkers();
+  }
+
+  // ── Rendering ─────────────────────────────────────────────────────────────
+
+  function filteredSpots(){
+    var list = spots;
+    if(activeFilter==='favourites') list = list.filter(function(s){ return !!favourites[s.id]; });
+    else if(activeFilter!=='all') list = list.filter(function(s){ return s.type === activeFilter; });
+    if(minStars > 0) list = list.filter(function(s){ return (s.ratingAvg||0) >= minStars && (s.ratingCount||0) > 0; });
+    return list;
+  }
+
+  function starsHTML(avg, count, size){
+    var full  = Math.round(avg);
+    var html  = '';
+    for(var i=1;i<=5;i++) html += '<span style="color:'+(i<=full?'#C97D2C':'#ccc')+';font-size:'+(size||16)+'px;">★</span>';
+    if(count>0) html += '<span style="font-size:11px;color:#8a948d;margin-left:4px;">('+count+')</span>';
+    return html;
+  }
+
+  function costLabel(c){ return c==='free'?'Free':c==='paid'?'Paid':'Cost unknown'; }
+
+  function renderList(){
+    var el = document.getElementById('listView');
+    var list = filteredSpots().slice().sort(function(a,b){ return (b.addedAt||0)-(a.addedAt||0); });
+    if(!list.length){
+      var msg = activeFilter === 'favourites'
+        ? '<div class="listEmpty"><div class="t">No favourites yet</div>Tap ❤️ on any spot to save it here.</div>'
+        : '<div class="listEmpty"><div class="t">Nothing here yet</div>Add the first spot from the map.</div>';
+      el.innerHTML = msg;
+      return;
+    }
+    el.innerHTML = list.map(function(s){
+      var t = TYPES[s.type]||TYPES.site;
+      var am = (s.amenities||[]).map(function(k){ var a=AMENITIES.find(function(x){return x.key===k;}); return a?'<span>'+a.label+'</span>':''; }).join('');
+      var murl = s.source
+        ? 'https://maps.google.com/maps/search/'+encodeURIComponent(s.name+(s.county?', Co. '+s.county+', Ireland':'')).replace(/%20/g,'+')
+        : 'https://maps.google.com/maps?q='+s.lat.toFixed(6)+','+s.lng.toFixed(6);
+      var isFav = !!favourites[s.id];
+      return '<div class="listCard" data-id="'+s.id+'">' +
+        '<span class="ttype" style="background:'+t.color+'">'+t.label+'</span>' +
+        (isFav ? '<span style="float:right;font-size:14px;">❤️</span>' : '') +
+        '<h3>'+esc(s.name)+'</h3>' +
+        (s.county?'<div style="font-size:11px;color:#6b7670;margin-bottom:4px;">Co. '+esc(s.county)+'</div>':'') +
+        '<div class="lmeta">'+s.lat.toFixed(4)+', '+s.lng.toFixed(4)+' — '+costLabel(s.cost)+'</div>' +
+        (s.notes?'<div class="lnotes">'+esc(s.notes)+'</div>':'') +
+        (am?'<div class="amlist">'+am+'</div>':'') +
+        ((s.ratingCount>0)?'<div class="lrating">'+starsHTML(s.ratingAvg,s.ratingCount,16)+'</div>':'') +
+        '<a class="directionsBtn" href="'+murl+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">▷ Get Directions</a>' +
+        '</div>';
+    }).join('');
+  }
+
+  function render(){
+    document.getElementById('countLabel').textContent = spots.length + (spots.length===1?' spot':' spots');
+    if(mapReady) safeRebuild();
+    renderList();
+  }
+
+  // ── Detail sheet ──────────────────────────────────────────────────────────
+
+  var currentDetailId = null;
+
+  function openDetail(id){
+    var s = spots.find(function(x){ return x.id===id; });
+    if(!s) return;
+    currentDetailId = id;
+    var t = TYPES[s.type]||TYPES.site;
+    var am = (s.amenities||[]).map(function(k){ var a=AMENITIES.find(function(x){return x.key===k;}); return a?'<span>'+a.label+'</span>':''; }).join('');
+    var murl = s.source
+      ? 'https://maps.google.com/maps/search/'+encodeURIComponent(s.name+(s.county?', Co. '+s.county+', Ireland':'')).replace(/%20/g,'+')
+      : 'https://maps.google.com/maps?q='+s.lat.toFixed(6)+','+s.lng.toFixed(6);
+    var isFav = !!favourites[s.id];
+    var spotReviews = reviews[s.id] || [];
+    var reviewsHTML = spotReviews.length
+      ? spotReviews.map(function(r, i){
+          return '<div class="reviewItem">' +
+            '<div class="rtext">'+esc(r.text)+'</div>' +
+            '<div class="rmeta">'+new Date(r.ts).toLocaleDateString('en-IE')+'</div>' +
+            (isAdmin ? '<button class="rdelete" onclick="deleteReview(\''+s.id+'\','+i+')">✕</button>' : '') +
+          '</div>';
+        }).join('')
+      : '<div style="font-size:12.5px;color:#8a948d;margin-bottom:8px;">No reviews yet — be the first!</div>';
+
+    document.getElementById('detailContent').innerHTML =
+      '<div class="ticket">' +
+      '<span class="ttype" style="background:'+t.color+'">'+t.label+'</span>' +
+      '<h3>'+esc(s.name)+'</h3>' +
+      (s.notes?'<div class="tnotes">'+esc(s.notes)+'</div>':'') +
+      (am?'<div class="divider"></div><div class="amlist">'+am+'</div>':'') +
+      '<div class="tcost">'+costLabel(s.cost)+'</div>' +
+      '<div class="tcoords">'+s.lat.toFixed(5)+', '+s.lng.toFixed(5)+'</div>' +
+      ((s.ratingCount>0)?'<div class="trating">'+starsHTML(s.ratingAvg,s.ratingCount,20)+'</div>':'<div class="trating" style="color:#ccc;font-size:13px;">No ratings yet — be the first!</div>') +
+      '<button class="heartBtn'+(isFav?' hearted':'')+'" onclick="toggleFav(\''+s.id+'\')"><span class="hicon">'+(isFav?'❤️':'🤍')+'</span>'+(isFav?'Saved to favourites':'Save to favourites')+'</button>' +
+      '<a class="directionsBtn" href="'+murl+'" target="_blank" rel="noopener">▷ Get Directions in Google Maps</a>' +
+      '<div class="rateSection">' +
+        '<label>Rate this spot</label>' +
+        '<div class="rateStarsRow" id="rateStarsRow">' +
+          [1,2,3,4,5].map(function(n){ return '<button class="rateStarBtn" data-n="'+n+'" onclick="hoverRating('+n+')">★</button>'; }).join('') +
+        '</div>' +
+        '<button class="submitRatingBtn" id="submitRatingBtn" onclick="submitRating()" disabled>Submit rating</button>' +
+      '</div>' +
+      '<div class="reviewsSection">' +
+        '<span class="rlabel">Reviews</span>' +
+        reviewsHTML +
+        '<div class="writeReviewBox">' +
+          '<textarea id="reviewText" placeholder="Share your experience... (anonymous, max 280 characters)" maxlength="280" oninput="updateReviewCount()"></textarea>' +
+          '<div class="charCount"><span id="reviewCount">0</span>/280</div>' +
+          '<button class="submitReviewBtn" id="submitReviewBtn" onclick="submitReview()" disabled>Post review</button>' +
+        '</div>' +
+      '</div>' +
+      (isAdmin ? '<button class="deleteBtn" onclick="deleteSpot()">🗑 Delete this spot</button>' : '') +
+      ((!isAdmin && sessionSpotIds[s.id]) ? '<button class="deleteBtn" onclick="deleteSpot()">🗑 Remove spot I just added</button>' : '') +
+      '</div>';
+    document.getElementById('detailOverlay').classList.add('show');
+    document.getElementById('detailSheet').classList.add('show');
+  }
+
+  var pendingRating = 0;
+
+  window.toggleFav = function(id){
+    if(favourites[id]){
+      delete favourites[id];
+    } else {
+      favourites[id] = true;
+    }
+    saveFavourites();
+    // update button in place
+    var btn = document.querySelector('.heartBtn');
+    if(btn){
+      var isFav = !!favourites[id];
+      btn.classList.toggle('hearted', isFav);
+      btn.innerHTML = '<span class="hicon">'+(isFav?'❤️':'🤍')+'</span>'+(isFav?'Saved to favourites':'Save to favourites');
+    }
+    // update list if favourites filter active
+    if(activeFilter==='favourites') renderList();
+  };
+
+  window.updateReviewCount = function(){
+    var ta = document.getElementById('reviewText');
+    var btn = document.getElementById('submitReviewBtn');
+    if(!ta || !btn) return;
+    var len = ta.value.trim().length;
+    var counter = document.getElementById('reviewCount');
+    if(counter) counter.textContent = len;
+    btn.disabled = len < 3;
+  };
+
+  window.submitReview = function(){
+    if(!currentDetailId) return;
+    var ta = document.getElementById('reviewText');
+    if(!ta) return;
+    var text = ta.value.trim();
+    if(text.length < 3) return;
+    if(!reviews[currentDetailId]) reviews[currentDetailId] = [];
+    reviews[currentDetailId].push({text: text, ts: Date.now()});
+    saveReviews();
+    // sync to Firebase if connected
+    if(useFirebase && db){
+      db.collection('reviews').doc(currentDetailId).set({reviews: reviews[currentDetailId]}).catch(console.error);
+    }
+    // refresh detail sheet
+    var id = currentDetailId;
+    closeDetail();
+    setTimeout(function(){ openDetail(id); }, 100);
+  };
+
+  window.deleteReview = function(spotId, index){
+    if(!isAdmin) return;
+    if(!confirm('Delete this review?')) return;
+    if(reviews[spotId]){
+      reviews[spotId].splice(index, 1);
+      if(reviews[spotId].length === 0) delete reviews[spotId];
+      saveReviews();
+      if(useFirebase && db){
+        var payload = reviews[spotId] ? {reviews: reviews[spotId]} : {};
+        db.collection('reviews').doc(spotId).set(payload).catch(console.error);
+      }
+    }
+    var id = currentDetailId;
+    closeDetail();
+    setTimeout(function(){ openDetail(id); }, 100);
+  };
+
+  window.hoverRating = function(n){
+    pendingRating = n;
+    document.querySelectorAll('.rateStarBtn').forEach(function(b,i){
+      b.classList.toggle('active', i < n);
+    });
+    document.getElementById('submitRatingBtn').disabled = false;
+  };
+
+  window.submitRating = function(){
+    var s = spots.find(function(x){ return x.id===currentDetailId; });
+    if(!s || !pendingRating) return;
+    var oldCount = s.ratingCount||0;
+    var oldAvg   = s.ratingAvg||0;
+    var newCount = oldCount + 1;
+    var newAvg   = Math.round(((oldAvg * oldCount) + pendingRating) / newCount * 10) / 10;
+    s.ratingAvg  = newAvg;
+    s.ratingCount= newCount;
+
+    if(useFirebase){
+      updateRatingInFirebase(s.id, newAvg, newCount).catch(console.error);
+    } else {
+      saveLocalSpots();
+    }
+
+    // Update UI
+    var rateSection = document.querySelector('.rateSection');
+    if(rateSection) rateSection.innerHTML = '<div class="ratedMsg">★ Thanks for rating! ('+newAvg+' avg from '+newCount+' rating'+(newCount!==1?'s':'')+')</div>';
+    renderList();
+  };
+
+  window.deleteSpot = function(){
+    if(!currentDetailId) return;
+    var s = spots.find(function(x){ return x.id===currentDetailId; });
+    if(!s) return;
+    // check permission
+    if(!isAdmin && !sessionSpotIds[s.id]){
+      alert('You can only delete spots you added in this session.');
+      return;
+    }
+    if(!confirm('Delete "' + s.name + '"? This cannot be undone.')) return;
+    spots = spots.filter(function(x){ return x.id !== currentDetailId; });
+    delete sessionSpotIds[currentDetailId];
+    if(useFirebase && db){
+      db.collection('spots').doc(currentDetailId).delete().catch(console.error);
+    } else {
+      saveLocalSpots();
+    }
+    closeDetail();
+    render();
+  };
+
+  function closeDetail(){
+    document.getElementById('detailOverlay').classList.remove('show');
+    document.getElementById('detailSheet').classList.remove('show');
+    pendingRating = 0;
+    currentDetailId = null;
+  }
+  document.getElementById('detailOverlay').addEventListener('click', closeDetail);
+  document.getElementById('detailCloseBtn').addEventListener('click', closeDetail);
+
+  // list card tap -> jump to map + open detail
+  document.getElementById('listView').addEventListener('click', function(e){
+    var card = e.target.closest('.listCard');
+    if(!card) return;
+    var id = card.getAttribute('data-id');
+    var s = spots.find(function(x){ return x.id===id; });
+    if(!s) return;
+    showMapView();
+    map.flyTo({center:[s.lng, s.lat], zoom:13, duration:600});
+    setTimeout(function(){ openDetail(id); }, 700);
+  });
+
+  // ── Chips ────────────────────────────────────────────────────────────────
+
+  function buildChips(){
+    var wrap = document.getElementById('chips');
+    var all = [
+      {key:'all', label:'All', color:'#F4EFE3', letter:null},
+      {key:'favourites', label:'My Favourites', color:'#e74c3c', letter:'❤️'}
+    ].concat(
+      Object.keys(TYPES).map(function(k){ return {key:k, label:TYPES[k].label, color:TYPES[k].color, letter:TYPES[k].letter}; })
+    );
+    wrap.innerHTML = all.map(function(c){
+      var icon = c.letter
+        ? '<span style="font-size:13px;line-height:1;">' + c.letter + '</span>'
+        : '<span class="dot" style="background:' + c.color + '"></span>';
+      return '<button class="chip' + (c.key===activeFilter?' active':'') + '" data-key="' + c.key + '">' + icon + c.label + '</button>';
+    }).join('');
+    wrap.querySelectorAll('.chip').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        activeFilter = btn.getAttribute('data-key');
+        wrap.querySelectorAll('.chip').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        render();
+      });
+    });
+  }
+
+  function buildStarChips(){
+    var wrap = document.getElementById('starChips');
+    var options = [
+      {n:0, label:'Any rating'},
+      {n:3, label:'3★ +'},
+      {n:4, label:'4★ +'},
+      {n:5, label:'5★ only'},
+    ];
+    wrap.innerHTML = options.map(function(o){
+      var stars = o.n > 0 ? o.label : o.label;
+      return '<button class="chip'+(minStars===o.n?' active':'')+'" data-stars="'+o.n+'">'+stars+'</button>';
+    }).join('');
+    wrap.querySelectorAll('.chip').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        minStars = parseInt(btn.getAttribute('data-stars'));
+        wrap.querySelectorAll('.chip').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        render();
+      });
+    });
+  }
+
+  // ── View toggle ───────────────────────────────────────────────────────────
+
+  function showMapView(){
+    document.getElementById('listView').classList.remove('show');
+    document.getElementById('toList').classList.remove('active');
+    document.getElementById('toMap').classList.add('active');
+    setTimeout(function(){ map.resize(); if(mapReady) safeRebuild(); }, 50);
+  }
+  function showListView(){
+    document.getElementById('listView').classList.add('show');
+    document.getElementById('toMap').classList.remove('active');
+    document.getElementById('toList').classList.add('active');
+  }
+  document.getElementById('toMap').addEventListener('click', showMapView);
+  document.getElementById('toList').addEventListener('click', showListView);
+
+  // ── Add spot flow ─────────────────────────────────────────────────────────
+
+  var fab = document.getElementById('fab');
+  var addBanner = document.getElementById('addBanner');
+
+  fab.addEventListener('click', function(){
+    if(addMode){ exitAddMode(); return; }
+    addMode = true;
+    addBanner.classList.add('show');
+    fab.classList.add('cancel');
+    fab.textContent = '✕ Cancel';
+    showMapView();
+    map.getCanvas().style.cursor = 'crosshair';
+  });
+  document.getElementById('cancelAdd').addEventListener('click', exitAddMode);
+
+  function exitAddMode(){
+    addMode = false;
+    addBanner.classList.remove('show');
+    fab.classList.remove('cancel');
+    fab.textContent = '+ Add spot';
+    map.getCanvas().style.cursor = '';
+  }
+
+  function buildTypeGrid(){
+    var wrap = document.getElementById('typeGrid');
+    wrap.innerHTML = Object.keys(TYPES).map(function(k){
+      var t = TYPES[k];
+      return '<div class="typeOpt'+(k===selectedType?' selected':'')+'" data-key="'+k+'"><span class="dot" style="background:'+t.color+'"></span>'+t.label+'</div>';
+    }).join('');
+    wrap.querySelectorAll('.typeOpt').forEach(function(opt){
+      opt.addEventListener('click', function(){
+        selectedType = opt.getAttribute('data-key');
+        wrap.querySelectorAll('.typeOpt').forEach(function(o){ o.classList.remove('selected'); });
+        opt.classList.add('selected');
+      });
+    });
+  }
+
+  function buildAmenities(){
+    var wrap = document.getElementById('amenities');
+    wrap.innerHTML = AMENITIES.map(function(a){
+      return '<div class="amenity" data-key="'+a.key+'">'+a.label+'</div>';
+    }).join('');
+    wrap.querySelectorAll('.amenity').forEach(function(el){
+      el.addEventListener('click', function(){
+        var k = el.getAttribute('data-key');
+        selectedAmenities[k] = !selectedAmenities[k];
+        el.classList.toggle('selected', !!selectedAmenities[k]);
+      });
+    });
+  }
+
+  function buildStars(){
+    var wrap = document.getElementById('starsRow');
+    wrap.innerHTML = [1,2,3,4,5].map(function(n){
+      return '<button class="starBtn" data-n="'+n+'">★</button>';
+    }).join('');
+    wrap.querySelectorAll('.starBtn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        selectedRating = parseInt(btn.getAttribute('data-n'));
+        wrap.querySelectorAll('.starBtn').forEach(function(b){ b.classList.toggle('active', parseInt(b.getAttribute('data-n')) <= selectedRating); });
+      });
+    });
+  }
+
+  document.querySelectorAll('#costRow .costOpt').forEach(function(opt){
+    opt.addEventListener('click', function(){
+      selectedCost = opt.getAttribute('data-cost');
+      document.querySelectorAll('#costRow .costOpt').forEach(function(o){ o.classList.remove('selected'); });
+      opt.classList.add('selected');
+    });
+  });
+
+  document.getElementById('fName').addEventListener('input', function(){
+    document.getElementById('saveBtn').disabled = !this.value.trim();
+  });
+
+  function openAddSheet(){
+    document.getElementById('coordsLabel').textContent = pendingLat.toFixed(5) + ', ' + pendingLng.toFixed(5);
+    document.getElementById('fName').value = '';
+    document.getElementById('fNotes').value = '';
+    selectedType = 'site'; selectedCost = 'free'; selectedAmenities = {}; selectedRating = 0;
+    buildTypeGrid(); buildAmenities(); buildStars();
+    document.querySelectorAll('#costRow .costOpt').forEach(function(o){ o.classList.toggle('selected', o.getAttribute('data-cost')==='free'); });
+    document.getElementById('saveBtn').disabled = true;
+    document.getElementById('addOverlay').classList.add('show');
+    document.getElementById('addSheet').classList.add('show');
+  }
+  function closeAddSheet(){
+    document.getElementById('addOverlay').classList.remove('show');
+    document.getElementById('addSheet').classList.remove('show');
+  }
+  document.getElementById('addOverlay').addEventListener('click', closeAddSheet);
+
+  document.getElementById('saveBtn').addEventListener('click', function(){
+    var name = document.getElementById('fName').value.trim();
+    if(!name) return;
+    var spot = {
+      id: 'spot_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+      name: name, type: selectedType, cost: selectedCost,
+      lat: pendingLat, lng: pendingLng,
+      notes: document.getElementById('fNotes').value.trim(),
+      amenities: Object.keys(selectedAmenities).filter(function(k){ return selectedAmenities[k]; }),
+      ratingAvg: selectedRating || 0,
+      ratingCount: selectedRating ? 1 : 0,
+      addedAt: Date.now()
+    };
+    spots.unshift(spot);
+    sessionSpotIds[spot.id] = true;
+    render();
+    closeAddSheet();
+    if(useFirebase){
+      saveToFirebase(spot).catch(console.error);
+    } else {
+      saveLocalSpots();
+    }
+  });
+
+  // ── Utilities ─────────────────────────────────────────────────────────────
+
+  function esc(str){
+    var d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+
+  buildChips();
+  buildStarChips();
+  loadSpots();
+
+})();
+</script>
+</body>
+</html>
