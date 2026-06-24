@@ -1,0 +1,1510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Planit — Discover Ireland</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
+<style>
+  :root{
+    --ink:#1B2420; --ink-2:#243029; --ink-soft:rgba(244,239,227,0.68);
+    --paper:#F4EFE3; --paper-2:#EAE2CE;
+    --amber:#C97D2C; --amber-dark:#A7651E; --moss:#3C5A45;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; margin:0; padding:0;}
+  html,body{height:100%; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--ink); color:var(--paper); overflow:hidden;}
+
+  #app{position:relative; width:100vw; height:100vh; height:100dvh; display:flex; flex-direction:column;}
+
+  /* Header */
+  header{flex:0 0 auto; background:var(--ink); padding:10px 16px 10px; border-bottom:1px solid rgba(244,239,227,0.1); z-index:30;}
+  .brand{display:flex; align-items:center; gap:10px;}
+
+  /* Chips */
+  .chips{display:flex; gap:6px; overflow-x:auto; padding:9px 16px 11px; flex:0 0 auto; background:var(--ink); border-bottom:1px solid rgba(244,239,227,0.1); z-index:30; scrollbar-width:none;}
+  .chips::-webkit-scrollbar{display:none;}
+  .chip{flex:0 0 auto; padding:6px 12px; border-radius:20px; border:1px solid rgba(244,239,227,0.22); background:transparent; color:var(--paper); font-size:12px; font-weight:500; white-space:nowrap; cursor:pointer; display:flex; align-items:center; gap:5px;}
+  .chip .dot{width:7px; height:7px; border-radius:50%;}
+  .chip.active{background:var(--paper); color:var(--ink); border-color:var(--paper); font-weight:700;}
+
+  /* Map */
+  #mapWrap{position:relative; flex:1 1 auto; min-height:0;}
+  #map{position:absolute; inset:0;}
+  .maplibregl-ctrl-attrib{font-size:10px !important;}
+
+  /* View toggle */
+  .viewToggle{position:absolute; top:14px; right:14px; z-index:25; background:var(--paper); border-radius:8px; display:flex; overflow:hidden; box-shadow:0 3px 10px rgba(0,0,0,0.3);}
+  .viewToggle button{border:none; background:transparent; padding:8px 12px; font-size:12px; font-weight:700; color:var(--ink); cursor:pointer; font-family:inherit;}
+  .viewToggle button.active{background:var(--ink); color:var(--paper);}
+
+  /* Add banner */
+  .addBanner{position:absolute; top:14px; left:50%; transform:translateX(-50%); background:var(--amber); color:#fff; padding:9px 16px; border-radius:8px; font-size:13px; font-weight:600; z-index:28; box-shadow:0 3px 10px rgba(0,0,0,0.35); display:none; align-items:center; gap:8px; white-space:nowrap;}
+  .addBanner.show{display:flex;}
+  .addBanner button{background:rgba(255,255,255,0.25); border:none; color:#fff; border-radius:5px; padding:3px 8px; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit;}
+
+  /* FAB */
+  .fab{position:absolute; bottom:20px; right:18px; z-index:27; background:var(--amber); color:#fff; border:none; border-radius:30px; padding:13px 18px; font-size:14px; font-weight:700; font-family:inherit; box-shadow:0 4px 14px rgba(0,0,0,0.4); cursor:pointer; display:flex; align-items:center; gap:7px;}
+  .fab:active{background:var(--amber-dark);}
+  .fab.cancel{background:var(--ink-2); border:1px solid rgba(244,239,227,0.3);}
+
+  /* Sheet */
+  .sheetOverlay{position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:40; display:none;}
+  .sheetOverlay.show{display:block;}
+  .sheet{position:fixed; left:0; right:0; bottom:0; z-index:41; background:var(--paper); color:var(--ink); border-radius:18px 18px 0 0; max-height:90vh; overflow-y:auto; padding:16px 18px 28px; transform:translateY(100%); transition:transform 0.25s ease; box-shadow:0 -6px 24px rgba(0,0,0,0.4);}
+  .sheet.show{transform:translateY(0);}
+  /* Report and admin sheets sit above detail sheet */
+  #reportOverlay, #reportsOverlay{z-index:50;}
+  #reportSheet, #reportsSheet{z-index:51;}
+  .sheetHandle{width:36px; height:4px; background:rgba(27,36,32,0.18); border-radius:3px; margin:0 auto 14px;}
+  .sheetTopBar{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
+  .sheetTopBar .sheetHandle{margin:0;}
+  .sheetCloseBtn{background:none; border:none; font-size:22px; color:#8a948d; cursor:pointer; padding:0 4px; line-height:1; font-family:inherit;}
+  .sheetCloseBtn:active{color:var(--ink);}
+  .sheet h2{font-size:17px; margin:0 0 4px; font-weight:800; text-transform:uppercase; letter-spacing:0.03em;}
+  .coords{font-size:11px; font-family:ui-monospace,monospace; color:#6b7670; margin-bottom:14px;}
+
+  /* Form fields */
+  .field{margin-bottom:13px;}
+  .field label{display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#5a655e; margin-bottom:5px;}
+  .field input[type=text], .field textarea{width:100%; border:1px solid rgba(27,36,32,0.18); border-radius:8px; padding:10px 11px; font-family:inherit; font-size:14px; background:#fff; color:var(--ink);}
+  .field textarea{resize:vertical; min-height:58px;}
+
+  .typeGrid{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .typeOpt{border:1.5px solid rgba(27,36,32,0.18); border-radius:8px; padding:9px 10px; display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:600;}
+  .typeOpt .dot{width:10px; height:10px; border-radius:50%; flex:0 0 auto;}
+  .typeOpt.selected{border-color:var(--ink); background:var(--paper-2);}
+
+  .costRow{display:flex; gap:8px;}
+  .costOpt{flex:1; border:1.5px solid rgba(27,36,32,0.18); border-radius:8px; padding:9px; text-align:center; font-size:13px; font-weight:600; cursor:pointer;}
+  .costOpt.selected{border-color:var(--ink); background:var(--paper-2);}
+
+  .amenities{display:flex; flex-wrap:wrap; gap:7px;}
+  .amenity{border:1.5px solid rgba(27,36,32,0.18); border-radius:20px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;}
+  .amenity.selected{background:var(--moss); color:#fff; border-color:var(--moss);}
+
+  /* Stars */
+  .starsRow{display:flex; gap:6px;}
+  .starBtn{font-size:26px; background:none; border:none; cursor:pointer; padding:2px; line-height:1; color:#ccc; transition:color 0.1s;}
+  .starBtn.active{color:#C97D2C;}
+
+  /* Privacy notice */
+  .privacyNote{background:rgba(27,36,32,0.06); border-radius:8px; padding:10px 12px; font-size:11.5px; color:#5a655e; line-height:1.5; margin-bottom:14px; border-left:3px solid var(--moss);}
+
+  /* Photo upload */
+  .photoUploadArea{border:2px dashed rgba(27,36,32,0.2); border-radius:10px; padding:16px; text-align:center; cursor:pointer; margin-bottom:4px; position:relative; background:#fff;}
+  .photoUploadArea:active{background:var(--paper-2);}
+  .photoUploadArea input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+  .photoUploadArea .uploadIcon{font-size:28px; display:block; margin-bottom:4px;}
+  .photoUploadArea .uploadText{font-size:13px; color:#5a655e;}
+  .photoPreview{width:100%; max-height:180px; object-fit:cover; border-radius:8px; margin-top:8px; display:none;}
+  .photoStatus{font-size:11.5px; color:var(--moss); margin-top:4px; font-weight:600;}
+
+  /* Report button */
+  .reportBtn{display:block; background:transparent; color:#8a948d; border:1px solid rgba(27,36,32,0.15); text-align:center; padding:9px; border-radius:9px; font-size:12px; font-weight:600; font-family:inherit; width:100%; margin-top:8px; cursor:pointer;}
+  .reportBtn:active{background:var(--paper-2);}
+
+  /* Report sheet */
+  .reportReasons{display:flex; flex-direction:column; gap:8px; margin-bottom:14px;}
+  .reportReason{border:1.5px solid rgba(27,36,32,0.18); border-radius:8px; padding:11px 14px; font-size:13px; font-weight:600; cursor:pointer; text-align:left; background:#fff; font-family:inherit;}
+  .reportReason.selected{border-color:#c0392b; background:#fdf0ef; color:#c0392b;}
+
+  /* Admin reports queue */
+  .reportsQueue{padding:14px 0;}
+  .reportItem{background:var(--paper); border-radius:10px; margin-bottom:12px; padding:14px;}
+  .reportItem .riName{font-weight:800; font-size:14px; margin-bottom:4px;}
+  .reportItem .riReason{font-size:12px; color:#c0392b; font-weight:700; margin-bottom:4px;}
+  .reportItem .riNote{font-size:12px; color:#6b7670; margin-bottom:10px;}
+  .reportItem .riDate{font-size:11px; color:#8a948d; margin-bottom:10px;}
+  .reportActions{display:flex; gap:8px;}
+  .reportRemove{flex:1; background:#c0392b; color:#fff; border:none; border-radius:8px; padding:10px; font-size:13px; font-weight:700; font-family:inherit; cursor:pointer;}
+  .reportDismiss{flex:1; background:transparent; color:#6b7670; border:1.5px solid rgba(27,36,32,0.18); border-radius:8px; padding:10px; font-size:13px; font-weight:700; font-family:inherit; cursor:pointer;}
+
+  /* Spot photo in detail sheet */
+  .spotPhoto{width:100%; max-height:220px; object-fit:cover; border-radius:10px; margin-bottom:12px; display:block;}
+  .photoPending{background:var(--paper-2); border-radius:8px; padding:10px 12px; font-size:12px; color:#6b7670; margin-bottom:10px; text-align:center;}
+
+  .saveBtn{width:100%; background:var(--ink); color:var(--paper); border:none; border-radius:10px; padding:13px; font-size:14px; font-weight:700; font-family:inherit; margin-top:4px; cursor:pointer;}
+  .saveBtn:disabled{opacity:0.4;}
+
+  /* Detail sheet */
+  .ticket{color:var(--ink);}
+  .ttype{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; padding:3px 8px; border-radius:12px; color:#fff; margin-bottom:8px;}
+  .ticket h3{font-size:19px; font-weight:800; margin-bottom:7px; line-height:1.2;}
+  .ticket .tnotes{font-size:13px; color:#4b5650; line-height:1.45; margin-bottom:9px;}
+  .ticket .divider{height:1px; background:repeating-linear-gradient(90deg,rgba(27,36,32,0.2) 0 5px,transparent 5px 10px); margin:9px 0;}
+  .ticket .amlist{display:flex; flex-wrap:wrap; gap:5px; margin-bottom:9px;}
+  .ticket .amlist span{font-size:10.5px; background:var(--paper-2); padding:3px 7px; border-radius:10px; font-weight:600; color:#3a443e;}
+  .ticket .tcost{font-size:12px; font-weight:700; color:var(--moss); margin-bottom:4px;}
+  .ticket .tcoords{font-size:10.5px; color:#8a948d; font-family:ui-monospace,monospace; margin-bottom:10px;}
+  .ticket .trating{font-size:20px; margin-bottom:12px; letter-spacing:2px;}
+  .ticket .tratingcount{font-size:11px; color:#8a948d; margin-left:4px;}
+  .directionsBtn{display:block; background:var(--moss); color:#fff; text-align:center; padding:11px; border-radius:9px; font-size:13px; font-weight:700; text-decoration:none; letter-spacing:0.02em; margin-bottom:10px;}
+  .directionsBtn:active{opacity:0.85;}
+  .rateSection{margin-top:10px;}
+  .rateSection label{display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#5a655e; margin-bottom:6px;}
+  .rateStarsRow{display:flex; gap:6px; margin-bottom:8px;}
+  .rateStarBtn{font-size:28px; background:none; border:none; cursor:pointer; padding:2px; line-height:1; color:#ccc; transition:color 0.1s;}
+  .rateStarBtn.active{color:#C97D2C;}
+  .submitRatingBtn{width:100%; background:var(--ink); color:var(--paper); border:none; border-radius:9px; padding:11px; font-size:13px; font-weight:700; font-family:inherit; cursor:pointer;}
+  .deleteBtn{display:block; background:transparent; color:#c0392b; border:1.5px solid #c0392b; text-align:center; padding:10px; border-radius:9px; font-size:13px; font-weight:700; font-family:inherit; width:100%; margin-top:8px; cursor:pointer;}
+  .deleteBtn:active{background:#fdf0ef;}
+  .adminLoginBtn{display:block; background:transparent; color:#8a948d; border:1px solid rgba(27,36,32,0.15); text-align:center; padding:8px; border-radius:9px; font-size:12px; font-weight:600; font-family:inherit; width:100%; margin-top:6px; cursor:pointer;}
+  .adminLoginBtn.admin-active{color:var(--moss); border-color:var(--moss);}
+
+  /* Favourites */
+  .heartBtn{display:flex; align-items:center; justify-content:center; gap:6px; background:transparent; border:1.5px solid rgba(27,36,32,0.18); border-radius:9px; padding:10px; font-size:13px; font-weight:700; font-family:inherit; width:100%; margin-bottom:8px; cursor:pointer; color:var(--ink);}
+  .heartBtn.hearted{background:#fff0f0; border-color:#e74c3c; color:#e74c3c;}
+  .heartBtn .hicon{font-size:16px; line-height:1;}
+
+  /* Reviews */
+  .reviewsSection{margin-top:14px;}
+  .reviewsSection .rlabel{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#5a655e; margin-bottom:8px; display:block;}
+  .reviewItem{background:var(--paper-2); border-radius:8px; padding:10px 12px; margin-bottom:7px; position:relative;}
+  .reviewItem .rtext{font-size:13px; color:var(--ink); line-height:1.45; margin-bottom:4px;}
+  .reviewItem .rmeta{font-size:10.5px; color:#8a948d;}
+  .reviewItem .rdelete{position:absolute; top:8px; right:8px; background:none; border:none; font-size:14px; cursor:pointer; color:#c0392b; padding:2px 6px;}
+  .writeReviewBox{margin-top:8px;}
+  .writeReviewBox textarea{width:100%; border:1px solid rgba(27,36,32,0.18); border-radius:8px; padding:9px 11px; font-family:inherit; font-size:13px; background:#fff; color:var(--ink); resize:none; height:70px;}
+  .writeReviewBox .charCount{font-size:10.5px; color:#8a948d; text-align:right; margin-top:3px; margin-bottom:6px;}
+  .submitReviewBtn{width:100%; background:var(--ink); color:var(--paper); border:none; border-radius:9px; padding:10px; font-size:13px; font-weight:700; font-family:inherit; cursor:pointer;}
+  .submitReviewBtn:disabled{opacity:0.4;}
+  .reviewedMsg{font-size:12px; color:var(--moss); font-weight:700; text-align:center; padding:6px 0;}
+  #appFooter{flex:0 0 auto; background:var(--ink); border-top:1px solid rgba(244,239,227,0.08); padding:8px 16px; text-align:center; z-index:30;}
+  #appFooter a{font-size:11px; color:var(--ink-soft); text-decoration:none; border-bottom:1px solid rgba(244,239,227,0.2);}
+  #appFooter a:hover{color:var(--paper);}
+
+  /* List view */
+  #listView{flex:1 1 auto; min-height:0; background:var(--ink); z-index:15; overflow-y:auto; padding:14px 16px 100px; display:none;}
+  #listView.show{display:block;}
+  .listCard{background:var(--paper); color:var(--ink); border-radius:12px; padding:14px; margin-bottom:12px;}
+  .listCard .ttype{display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; padding:3px 8px; border-radius:12px; color:#fff; margin-bottom:7px;}
+  .listCard h3{font-size:16px; font-weight:800; margin-bottom:5px;}
+  .listCard .lmeta{font-size:11px; color:#6b7670; font-family:ui-monospace,monospace; margin-bottom:7px;}
+  .listCard .lnotes{font-size:12.5px; color:#3a443e; line-height:1.45; margin-bottom:8px;}
+  .listCard .amlist{display:flex; flex-wrap:wrap; gap:5px; margin-bottom:8px;}
+  .listCard .amlist span{font-size:10.5px; background:var(--paper-2); padding:3px 7px; border-radius:10px; font-weight:600; color:#3a443e;}
+  .listCard .lrating{font-size:16px; margin-bottom:6px;}
+  .listCard .directionsBtn{display:block; background:var(--moss); color:#fff; text-align:center; padding:10px; border-radius:8px; font-size:12.5px; font-weight:700; text-decoration:none;}
+  .listEmpty{color:var(--ink-soft); font-size:13px; text-align:center; margin-top:60px; line-height:1.5;}
+  .listEmpty .t{font-size:16px; font-weight:800; color:var(--paper); margin-bottom:6px;}
+
+  /* Loading */
+  /* Clusters */
+  .clusterMarker{display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--ink);color:var(--paper);font-weight:800;font-family:inherit;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.35);border:2.5px solid var(--paper);}
+  .clusterMarker.sm{width:34px;height:34px;font-size:12px;}
+  .clusterMarker.md{width:42px;height:42px;font-size:13px;}
+  .clusterMarker.lg{width:52px;height:52px;font-size:15px;}
+
+  .loadingBadge{position:absolute; top:14px; left:14px; z-index:25; background:var(--paper); color:var(--ink); font-size:11px; font-weight:600; padding:6px 10px; border-radius:8px; display:none;}
+  .loadingBadge.show{display:block;}
+
+
+</style>
+</head>
+<body>
+
+
+<div id="app">
+  <header>
+    <div class="brand">
+      <img src="data:image/png;base64,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" alt="Planit" style="height:42px;width:42px;object-fit:contain;border-radius:8px;"/>
+      <div style="display:flex;flex-direction:column;justify-content:center;margin-left:2px;">
+        <span style="font-size:20px;font-weight:800;text-transform:lowercase;letter-spacing:0.02em;color:var(--paper);line-height:1.1;">plan<span style="color:#6BBF8E;">it</span></span>
+        <span style="font-size:11px;color:var(--ink-soft);margin-top:1px;line-height:1.4;">Park it, review it.<br><span style="font-size:10px;">Your next camper trip is about to be out of this world!</span></span>
+      </div>
+      <span class="count" id="countLabel" style="margin-left:auto;">0 spots</span>
+    </div>
+  </header>
+
+  <div class="chips" id="chips"></div>
+  <div class="chips" id="starChips" style="padding-top:0; border-top:none;"></div>
+
+  <div id="mapWrap">
+    <div id="map"></div>
+    <div class="viewToggle">
+      <button id="toMap" class="active">Map</button>
+      <button id="toList">List</button>
+    </div>
+    <div class="loadingBadge" id="loadingBadge">Loading spots…</div>
+    <div class="addBanner" id="addBanner">
+      Tap the map to place a pin
+      <button id="cancelAdd">Cancel</button>
+    </div>
+    <button class="fab" id="fab">+ Add spot</button>
+  </div>
+
+  <div id="listView"></div>
+  <footer id="appFooter">
+    <a href="privacy.html" target="_blank">Privacy Policy</a>
+  </footer>
+</div>
+
+<!-- Add spot sheet -->
+<div class="sheetOverlay" id="addOverlay"></div>
+<div class="sheet" id="addSheet">
+  <div class="sheetTopBar">
+    <div class="sheetHandle"></div>
+    <button class="sheetCloseBtn" id="addSheetCloseBtn">✕</button>
+  </div>
+  <h2>Log this spot</h2>
+  <div class="coords" id="coordsLabel">--</div>
+
+  <div class="field">
+    <label>Name</label>
+    <input type="text" id="fName" placeholder="e.g. Clifden Quay car park" maxlength="80" />
+  </div>
+  <div class="field">
+    <label>Type</label>
+    <div class="typeGrid" id="typeGrid"></div>
+  </div>
+  <div class="field">
+    <label>Cost</label>
+    <div class="costRow" id="costRow">
+      <div class="costOpt" data-cost="free">Free</div>
+      <div class="costOpt" data-cost="paid">Paid</div>
+      <div class="costOpt" data-cost="unknown">Not sure</div>
+    </div>
+  </div>
+  <div class="field">
+    <label>Your Rating</label>
+    <div class="starsRow" id="starsRow"></div>
+  </div>
+  <div class="field">
+    <label>Amenities</label>
+    <div class="amenities" id="amenities"></div>
+  </div>
+  <div class="field">
+    <label>Notes</label>
+    <textarea id="fNotes" placeholder="Surface, noise, views, height barriers, anything useful." maxlength="300"></textarea>
+  </div>
+
+  <div class="field">
+    <label>Photo <span style="font-weight:400;color:#8a948d;">(optional — reviewed before going live)</span></label>
+    <div class="photoUploadArea" id="photoUploadArea">
+      <input type="file" id="fPhoto" accept="image/*" />
+      <span class="uploadIcon">📷</span>
+      <span class="uploadText">Tap to add a photo</span>
+    </div>
+    <img id="photoPreview" class="photoPreview" alt="Preview"/>
+    <div class="photoStatus" id="photoStatus"></div>
+  </div>
+
+  <div class="privacyNote">
+    🔒 <strong>Privacy notice:</strong> The location, name, notes and photo you enter will be visible to everyone who uses Planit after admin review. Do not include personal information or private property.
+  </div>
+
+  <button class="saveBtn" id="saveBtn" disabled>Save spot</button>
+</div>
+
+<!-- Admin moderation sheet -->
+<!-- Report submission sheet -->
+<div class="sheetOverlay" id="reportOverlay"></div>
+<div class="sheet" id="reportSheet" style="max-height:70vh;">
+  <div class="sheetTopBar">
+    <div class="sheetHandle"></div>
+    <button class="sheetCloseBtn" id="reportCloseBtn">✕</button>
+  </div>
+  <h2 style="margin-bottom:4px;">🚩 Report this spot</h2>
+  <p style="font-size:12px;color:#6b7670;margin-bottom:16px;">What's the issue?</p>
+  <div class="reportReasons" id="reportReasons">
+    <button class="reportReason" data-reason="Inappropriate content">🚫 Inappropriate content</button>
+    <button class="reportReason" data-reason="Wrong information">❌ Wrong information</button>
+    <button class="reportReason" data-reason="Duplicate spot">📍 Duplicate spot</button>
+    <button class="reportReason" data-reason="No longer exists">🏚 No longer exists</button>
+    <button class="reportReason" data-reason="Other">💬 Other</button>
+  </div>
+  <div class="field">
+    <label>Additional note <span style="font-weight:400;color:#8a948d;">(optional)</span></label>
+    <textarea id="reportNote" placeholder="Any extra details..." maxlength="200" style="min-height:50px;"></textarea>
+  </div>
+  <button class="saveBtn" id="submitReportBtn" disabled>Submit Report</button>
+</div>
+
+<!-- Admin reports queue sheet -->
+<div class="sheetOverlay" id="reportsOverlay"></div>
+<div class="sheet" id="reportsSheet" style="max-height:90vh;">
+  <div class="sheetTopBar">
+    <div class="sheetHandle"></div>
+    <button class="sheetCloseBtn" id="reportsCloseBtn">✕</button>
+  </div>
+  <h2 style="margin-bottom:4px;">🚩 Reports</h2>
+  <p style="font-size:12px;color:#6b7670;margin-bottom:14px;">Spots flagged by users</p>
+  <div class="reportsQueue" id="reportsQueue">
+    <p style="font-size:13px;color:#6b7670;text-align:center;">Loading…</p>
+  </div>
+  <button class="saveBtn" id="reportsCloseBtn2" style="background:var(--ink-2);margin-top:8px;">Close</button>
+</div>
+
+<!-- Detail sheet -->
+<div class="sheetOverlay" id="detailOverlay"></div>
+<div class="sheet" id="detailSheet" style="max-height:80vh;">
+  <div class="sheetTopBar">
+    <div class="sheetHandle"></div>
+    <button class="sheetCloseBtn" id="detailSheetCloseBtn">✕</button>
+  </div>
+  <div id="detailContent"></div>
+  <button class="saveBtn" id="detailCloseBtn" style="background:var(--ink-2); margin-top:10px;">Close</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ── Config ──────────────────────────────────────────────────────────────────
+
+  var TYPES = {
+    site:    {label:"Site",    color:"#2A6F77", letter:"🏕"},
+    pub:     {label:"Pub",     color:"#7B3F00", letter:"🍺"},
+    parking: {label:"Parking", color:"#5C6B73", letter:"🅿"},
+    other:   {label:"Other",   color:"#3C5A45", letter:"📍"}
+  };
+  var AMENITIES = [
+    {key:"water",    label:"💧 Water fill"},
+    {key:"waste",    label:"🗑 Waste disposal"},
+    {key:"electric", label:"⚡ Electric hookup"},
+    {key:"toilets",  label:"🚻 Toilets"},
+    {key:"showers",  label:"🚿 Showers"},
+    {key:"wifi",     label:"📶 WiFi"},
+    {key:"food",     label:"🍽 Food served"},
+    {key:"dogs",     label:"🐕 Dog friendly"}
+  ];
+  // Admin mode — activated via secret URL: ?admin
+  // Sign in with your Google account (bryanfilming@gmail.com) to activate
+  var ADMIN_EMAIL = "bryanfilming@gmail.com";
+  var isAdmin = false;
+  var auth = null;
+  var adminBtnAdded = false;
+
+  function activateAdmin(){
+    if(isAdmin) return;
+    isAdmin = true;
+    window.history.replaceState({}, '', window.location.pathname);
+    if(!adminBtnAdded){
+      adminBtnAdded = true;
+      var btn = document.createElement('button');
+      btn.textContent = '🚩';
+      btn.title = 'Reports queue';
+      btn.style.cssText = 'background:var(--amber);color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:16px;cursor:pointer;margin-left:8px;';
+      btn.addEventListener('click', openReportsQueue);
+      document.querySelector('.brand').appendChild(btn);
+    }
+  }
+
+  function checkAdminUrl(){
+    if(!window.location.search.includes('admin')) return;
+    // wait for Firebase Auth to load then sign in with Google
+    var interval = setInterval(function(){
+      if(!auth) return;
+      clearInterval(interval);
+
+      // check if returning from redirect
+      auth.getRedirectResult().then(function(result){
+        if(result && result.user){
+          if(result.user.email === ADMIN_EMAIL){
+            activateAdmin();
+          } else {
+            alert('That Google account is not authorised as admin.');
+            auth.signOut();
+            window.history.replaceState({}, '', window.location.pathname);
+          }
+          return;
+        }
+        // not returning from redirect — initiate sign in
+        var provider = new firebase.auth.GoogleAuthProvider();
+        provider.setCustomParameters({login_hint: ADMIN_EMAIL});
+        auth.signInWithRedirect(provider);
+      }).catch(function(e){
+        console.error('Auth error:', e);
+        alert('Sign in failed: ' + e.message);
+        window.history.replaceState({}, '', window.location.pathname);
+      });
+    }, 200);
+  }
+  checkAdminUrl();
+
+  var LOCAL_KEY  = "parkedup-spots-v2";
+  var LOCAL_VER  = "parkedup-data-version";
+  var DATA_VERSION = "2"; // bump this when seed data changes
+  var FB_KEY     = "parkedup-firebase-config";
+  var FAV_KEY    = "parkedup-favourites";
+  var REVIEWS_KEY= "parkedup-reviews";
+
+  // Session tracking — spots added this session can be deleted by owner
+  var sessionSpotIds = {};
+
+  // Favourites — stored locally per device
+  var favourites = {};
+  try { favourites = JSON.parse(localStorage.getItem(FAV_KEY) || '{}'); } catch(e){}
+
+  // Reviews — stored locally, will sync to Firebase when connected
+  var reviews = {};
+  try { reviews = JSON.parse(localStorage.getItem(REVIEWS_KEY) || '{}'); } catch(e){}
+
+  function saveFavourites(){ try{ localStorage.setItem(FAV_KEY, JSON.stringify(favourites)); }catch(e){} }
+  function saveReviews(){ try{ localStorage.setItem(REVIEWS_KEY, JSON.stringify(reviews)); }catch(e){} }
+
+  var spots       = [];
+  var activeFilter= "all";
+  var minStars    = 0; // 0 = no star filter
+  var addMode     = false;
+  var pendingLng  = 0, pendingLat = 0;
+  var selectedType= "site";
+  var selectedCost= "free";
+  var selectedAmenities = {};
+  var selectedRating = 0;
+  var mapMarkers  = {};
+  var useFirebase = false;
+  var db          = null;
+  var storage     = null;
+
+  // ── Firebase — hardcoded config ──────────────────────────────────────────
+
+  var FIREBASE_CONFIG = {
+    apiKey: "AIzaSyCBrp6KbNAm8f0WfSOncklep_XIniNrguI",
+    authDomain: "planit-aea59.firebaseapp.com",
+    projectId: "planit-aea59",
+    storageBucket: "planit-aea59.firebasestorage.app",
+    messagingSenderId: "432096207493",
+    appId: "1:432096207493:web:a0ccc45dd069360d1bffec"
+  };
+
+  function initFirebase(){
+    var scripts = [
+      'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js',
+      'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js',
+      'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js',
+      'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js'
+    ];
+    var loaded = 0;
+    function loadNext(){
+      if(loaded >= scripts.length){
+        try {
+          if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+          db = firebase.firestore();
+          storage = firebase.storage();
+          auth = firebase.auth();
+          useFirebase = true;
+          // check if returning from Google sign-in redirect
+          auth.getRedirectResult().then(function(result){
+            if(result && result.user && result.user.email === ADMIN_EMAIL){
+              activateAdmin();
+            }
+          }).catch(console.error);
+          // check if already signed in
+          auth.onAuthStateChanged(function(user){
+            if(user && user.email === ADMIN_EMAIL){
+              activateAdmin();
+            }
+          });
+          loadFirebaseSpots();
+        } catch(e){
+          console.error('Firebase init failed:', e);
+          loadLocalSpots();
+        }
+        return;
+      }
+      var s = document.createElement('script');
+      s.src = scripts[loaded++];
+      s.onload = loadNext;
+      s.onerror = function(){ console.error('Failed to load', s.src); loadLocalSpots(); };
+      document.head.appendChild(s);
+    }
+    loadNext();
+  }
+
+  function loadFirebaseSpots(){
+    document.getElementById('loadingBadge').classList.add('show');
+    db.collection('spots').orderBy('addedAt','desc').get()
+      .then(function(snap){
+        spots = [];
+        snap.forEach(function(doc){
+          spots.push(Object.assign({id: doc.id}, doc.data()));
+        });
+
+        // If database is empty, seed it with the default spots
+        if(spots.length === 0){
+          spots = seedSpots();
+          var batch = db.batch();
+          spots.forEach(function(s){
+            batch.set(db.collection('spots').doc(s.id), s);
+          });
+          return batch.commit().then(function(){
+            // also load reviews (will be empty)
+            return db.collection('reviews').get().then(function(rsnap){
+              rsnap.forEach(function(doc){ reviews[doc.id] = doc.data().reviews || []; });
+            });
+          });
+        }
+
+        // also load reviews from Firebase
+        return db.collection('reviews').get().then(function(rsnap){
+          rsnap.forEach(function(doc){
+            reviews[doc.id] = doc.data().reviews || [];
+          });
+        });
+      })
+      .then(function(){ render(); })
+      .catch(function(e){ console.error(e); loadLocalSpots(); })
+      .finally(function(){ document.getElementById('loadingBadge').classList.remove('show'); });
+  }
+
+  function saveToFirebase(spot){
+    if(!db) return Promise.reject('no db');
+    return db.collection('spots').doc(spot.id).set(spot);
+  }
+
+  function updateRatingInFirebase(spotId, newAvg, newCount){
+    if(!db) return Promise.resolve();
+    return db.collection('spots').doc(spotId).update({
+      ratingAvg: newAvg, ratingCount: newCount
+    });
+  }
+
+  // ── Local storage fallback ────────────────────────────────────────────────
+
+  function loadLocalSpots(){
+    document.getElementById('loadingBadge').classList.add('show');
+    try {
+      var raw = localStorage.getItem(LOCAL_KEY);
+      var savedVersion = localStorage.getItem(LOCAL_VER);
+      spots = raw ? JSON.parse(raw) : [];
+
+      // If no spots or data version is outdated, merge seed spots in
+      if(spots.length === 0 || savedVersion !== DATA_VERSION){
+        var seeds = seedSpots();
+        var existingIds = {};
+        spots.forEach(function(s){ existingIds[s.id] = true; });
+        // add seed spots that don't already exist
+        seeds.forEach(function(s){
+          if(!existingIds[s.id]) spots.push(s);
+        });
+        localStorage.setItem(LOCAL_VER, DATA_VERSION);
+        saveLocalSpots();
+      }
+    } catch(e){
+      spots = seedSpots();
+      saveLocalSpots();
+    }
+    document.getElementById('loadingBadge').classList.remove('show');
+    render();
+  }
+
+  function saveLocalSpots(){
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(spots)); } catch(e){}
+  }
+
+  function seedSpots(){
+    var now = Date.now();
+    return [{"id":"osm-ie-0000","name":"Keel Camping, Achill Island","type":"site","cost":"paid","lat":53.9743,"lng":-10.0805,"notes":"Expansive site on shores of Keel Strand with views of Minaun Cliffs. Recently renovated showers and kitchen. Shop and laundry on site.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Mayo","addedAt":1782167299303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0001","name":"Belleek Park Caravan & Camping","type":"site","cost":"paid","lat":54.1138,"lng":-9.1523,"notes":"Family friendly park in Ballina with full facilities. Activity base for Mayo.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Mayo","addedAt":1782167298303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0002","name":"Cong Caravan & Camping Park","type":"site","cost":"paid","lat":53.5399,"lng":-9.2735,"notes":"Peaceful rural park within 1 mile of Cong village, beside Lough Corrib.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Mayo","addedAt":1782167297303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0003","name":"Westport House Camping","type":"site","cost":"paid","lat":53.7958,"lng":-9.5283,"notes":"Scenic site within the Westport House estate grounds. Walking distance to Westport town.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Mayo","addedAt":1782167296303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0004","name":"Parkland Caravan & Camping, Claremorris","type":"site","cost":"paid","lat":53.7211,"lng":-8.9877,"notes":"Central Mayo location, good base for exploring Connacht.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Mayo","addedAt":1782167295303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0005","name":"Clifden Eco Beach Camping","type":"site","cost":"paid","lat":53.5237,"lng":-10.1338,"notes":"Award-winning eco site on the Wild Atlantic Way near Clifden. Beach access and stunning views.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Galway","addedAt":1782167294303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0006","name":"Salthill Caravan Park, Galway","type":"site","cost":"paid","lat":53.2602,"lng":-9.0805,"notes":"On the shores of Galway Bay. Walking distance to Salthill promenade and Galway city.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Galway","addedAt":1782167293303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0007","name":"Oughterard Caravan & Camping","type":"site","cost":"paid","lat":53.4282,"lng":-9.3234,"notes":"Quiet site on the shores of Lough Corrib. Gateway to Connemara.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Galway","addedAt":1782167292303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0008","name":"Lough Key Caravan & Camping","type":"site","cost":"paid","lat":53.9544,"lng":-8.1644,"notes":"Beautiful forest park setting on the shores of Lough Key. Excellent facilities and activities.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Roscommon","addedAt":1782167291303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0009","name":"Knocknarea Caravan & Camping","type":"site","cost":"paid","lat":54.2455,"lng":-8.5811,"notes":"Base for Knocknarea Mountain and Strandhill beach. Good facilities.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Sligo","addedAt":1782167290303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0010","name":"Strandhill Camping","type":"site","cost":"paid","lat":54.2703,"lng":-8.5954,"notes":"Close to Strandhill beach and surfing. Pub and restaurants nearby.","amenities":["water","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Sligo","addedAt":1782167289303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0011","name":"Rosses Point Caravan Park","type":"site","cost":"paid","lat":54.3088,"lng":-8.5706,"notes":"Coastal park at Rosses Point with beach access and views of Benbulben.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Sligo","addedAt":1782167288303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0012","name":"Camac Valley Tourist Caravan & Camping","type":"site","cost":"paid","lat":53.3075,"lng":-6.3971,"notes":"Closest campsite to Dublin city centre. Well-run site with full facilities. Bus to city centre.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Dublin","addedAt":1782167287303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0013","name":"The Hideaway Camping, Cork","type":"site","cost":"paid","lat":51.8928,"lng":-8.4621,"notes":"Popular site near Cork city with excellent amenities.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Cork","addedAt":1782167286303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0014","name":"Eagle Point Caravan & Camping","type":"site","cost":"paid","lat":51.7012,"lng":-9.4876,"notes":"Right on the water in west Cork. Great for kayaking and swimming.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Cork","addedAt":1782167285303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0015","name":"Barleycove Beach Camping","type":"site","cost":"paid","lat":51.4724,"lng":-9.7441,"notes":"Near the beautiful Barleycove beach on the Mizen Peninsula. Stunning location.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Cork","addedAt":1782167284303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0016","name":"Mannix Point Camping, Cahersiveen","type":"site","cost":"paid","lat":51.9497,"lng":-10.2267,"notes":"Quirky, artistic site on the Ring of Kerry run by Mortimer Moriarty. Unique atmosphere.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167283303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0017","name":"Beara Camping, Castletownbere","type":"site","cost":"paid","lat":51.6509,"lng":-9.9049,"notes":"Simple site on the Beara Peninsula. Wild Atlantic scenery.","amenities":["water","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167282303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0018","name":"Fossa Caravan & Camping, Killarney","type":"site","cost":"paid","lat":52.0388,"lng":-9.5554,"notes":"Well-located site near Killarney National Park. Good base for the Ring of Kerry.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167281303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0019","name":"Anchor Caravan Park, Caherdaniel","type":"site","cost":"paid","lat":51.7589,"lng":-10.0411,"notes":"Beautiful coastal location on Derrynane Bay. Access to beach.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167280303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0020","name":"Waterville Caravan & Camping","type":"site","cost":"paid","lat":51.8264,"lng":-10.1736,"notes":"Seafront location in Waterville village on the Ring of Kerry.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167279303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0021","name":"Ballinskelligs Caravan & Camping","type":"site","cost":"paid","lat":51.8289,"lng":-10.2689,"notes":"Remote coastal site near Ballinskelligs beach and Skellig views on clear days.","amenities":["water","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167278303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0022","name":"Doonbeg Strand Camping","type":"site","cost":"paid","lat":52.7292,"lng":-9.5264,"notes":"Small dog-friendly site on Doonbeg Bay. 18 pitches with EHU. Wild Atlantic Way location.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Clare","addedAt":1782167277303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0023","name":"Lahinch Caravan & Camping","type":"site","cost":"paid","lat":52.9329,"lng":-9.3396,"notes":"Walking distance to Lahinch beach and village. Near Cliffs of Moher.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Clare","addedAt":1782167276303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0024","name":"Doolin Camping","type":"site","cost":"paid","lat":53.0199,"lng":-9.3764,"notes":"Gateway to the Cliffs of Moher and Aran Islands ferry. Traditional music village nearby.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Clare","addedAt":1782167275303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0025","name":"Kilkee Caravan & Camping","type":"site","cost":"paid","lat":52.683,"lng":-9.6415,"notes":"By the horseshoe bay at Kilkee. Beach access and good town facilities.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Clare","addedAt":1782167274303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0026","name":"Adare Camping & Caravan","type":"site","cost":"paid","lat":52.5657,"lng":-8.7899,"notes":"Peaceful site near the beautiful village of Adare. Base for touring Limerick.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Limerick","addedAt":1782167273303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0027","name":"Powers the Pot, Clonmel","type":"site","cost":"paid","lat":52.4069,"lng":-7.8253,"notes":"Beside the Comeragh Mountains near Clonmel. Good base for walking holidays.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Tipperary","addedAt":1782167272303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0028","name":"Dunmore East Holiday Resort","type":"site","cost":"paid","lat":52.1507,"lng":-6.9986,"notes":"Activities including swimming, tennis and kayaking. Coastal village location.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Waterford","addedAt":1782167271303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0029","name":"Morriscastle Beach Camping","type":"site","cost":"paid","lat":52.5301,"lng":-6.3098,"notes":"Beside one of Wexford's beautiful Blue Flag beaches. 1 minute walk to the sand.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Wexford","addedAt":1782167270303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0030","name":"Ferrybank Caravan & Camping","type":"site","cost":"paid","lat":52.3445,"lng":-6.4592,"notes":"Open all year. Well-located site near Wexford town.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Wexford","addedAt":1782167269303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0031","name":"Parklands Caravan & Camping, Gorey","type":"site","cost":"paid","lat":52.6759,"lng":-6.2928,"notes":"Good base for exploring Wexford's coastline and heritage.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Wexford","addedAt":1782167268303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0032","name":"Brittas Bay Caravan Park","type":"site","cost":"paid","lat":52.8733,"lng":-6.0933,"notes":"Next to the popular Brittas Bay beach. Busy in summer, beautiful location.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Wicklow","addedAt":1782167267303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0033","name":"Wolohan's Silver Strand","type":"site","cost":"paid","lat":52.9548,"lng":-6.0167,"notes":"Clifftop site south of Wicklow Town with direct Silver Strand beach access.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Wicklow","addedAt":1782167266303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0034","name":"Lough Dan Camping","type":"site","cost":"paid","lat":53.0474,"lng":-6.2701,"notes":"Beautifully situated in the Wicklow Mountains beside Lough Dan. Basic but stunning.","amenities":["water","toilets"],"ratingAvg":0,"ratingCount":0,"county":"Wicklow","addedAt":1782167265303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0035","name":"Portrane Beach Camping","type":"site","cost":"paid","lat":53.4961,"lng":-6.1149,"notes":"Award-winning family park on the Fingal coastline north of Dublin. Hard standing and grass pitches.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Dublin","addedAt":1782167264303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0036","name":"Parson's Green Caravan & Camping","type":"site","cost":"paid","lat":52.7903,"lng":-6.1612,"notes":"Open all year. Pleasant site near Arklow.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Wicklow","addedAt":1782167263303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0037","name":"Lough Rynn Caravan & Camping","type":"site","cost":"paid","lat":53.9345,"lng":-7.9456,"notes":"Idyllic setting on the shores of Lough Rynn. Castle and gardens nearby.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Leitrim","addedAt":1782167262303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0038","name":"Shepherd's Rest, Sperrin Mountains","type":"site","cost":"paid","lat":54.8102,"lng":-7.0344,"notes":"Pub and campsite in the Sperrin AONB. Dog-friendly, great craic. Derry and Giant's Causeway within an hour.","amenities":["water","electric","toilets","showers","wifi","dogs","food"],"ratingAvg":0,"ratingCount":0,"county":"Tyrone","addedAt":1782167261303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0039","name":"Bush Caravan Park, Bushmills","type":"site","cost":"paid","lat":55.2043,"lng":-6.5209,"notes":"North Coast location near Giant's Causeway, Bushmills Distillery and Carrick-a-Rede rope bridge.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Antrim","addedAt":1782167260303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0040","name":"Ballyness Caravan Park","type":"site","cost":"paid","lat":55.2052,"lng":-6.5318,"notes":"Ideal for family trips along the Causeway Coast. Award-winning facilities.","amenities":["water","electric","toilets","showers","wifi"],"ratingAvg":0,"ratingCount":0,"county":"Antrim","addedAt":1782167259303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0041","name":"Killybegs Holiday Park","type":"site","cost":"paid","lat":54.6347,"lng":-8.4404,"notes":"Open all year. Fishing village location on the Wild Atlantic Way.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167258303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0042","name":"Streamstown Caravan & Camping","type":"site","cost":"paid","lat":54.6762,"lng":-8.2541,"notes":"Open all year. Near Ballyshannon and Bundoran surf beach.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167257303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0043","name":"Portsalon Caravan Park","type":"site","cost":"paid","lat":55.1889,"lng":-7.6342,"notes":"On Lough Swilly with beach access. Wild Donegal scenery.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167256303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0044","name":"Magheroarty Caravan Park","type":"site","cost":"paid","lat":55.1478,"lng":-8.1748,"notes":"Remote coastal site near Tory Island ferry. Off the beaten track.","amenities":["water","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167255303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0045","name":"Rossnowlagh Camping","type":"site","cost":"paid","lat":54.5449,"lng":-8.2184,"notes":"Near Rossnowlagh beach, one of Donegal's finest surf beaches.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167254303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0046","name":"Desert House Caravan & Camping","type":"site","cost":"paid","lat":51.6534,"lng":-8.6289,"notes":"Open all year. Rural Cork location near Clonakilty.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Cork","addedAt":1782167253303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0047","name":"Sexton's Caravan & Camping","type":"site","cost":"paid","lat":52.8892,"lng":-8.9745,"notes":"Open all year. Good base for touring the Burren and Clare coast.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Clare","addedAt":1782167252303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0048","name":"Riverside Farm Marina & Caravan","type":"site","cost":"paid","lat":53.4268,"lng":-7.9401,"notes":"Open all year. On the River Shannon near Athlone. Fishing and boating nearby.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Westmeath","addedAt":1782167251303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0049","name":"The Shepherds Rest Campsite","type":"site","cost":"paid","lat":53.5213,"lng":-7.7856,"notes":"Open all year. Countryside Ireland Hidden Heartlands location.","amenities":["water","electric","toilets","showers"],"ratingAvg":0,"ratingCount":0,"county":"Westmeath","addedAt":1782167250303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0050","name":"Clifden Town Motorhome Stopover","type":"site","cost":"paid","lat":53.4887,"lng":-9.9978,"notes":"Designated motorhome stopover in Clifden town. Electric hookup and waste disposal. Walking distance to shops and restaurants.","amenities":["water","waste","electric"],"ratingAvg":0,"ratingCount":0,"county":"Galway","addedAt":1782167249303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0051","name":"Westport Motorhome Parking","type":"site","cost":"paid","lat":53.7987,"lng":-9.5224,"notes":"Dedicated motorhome parking area in Westport. Near town centre amenities.","amenities":["water","waste"],"ratingAvg":0,"ratingCount":0,"county":"Mayo","addedAt":1782167248303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0052","name":"Kenmare Motorhome Stopover","type":"site","cost":"paid","lat":51.8813,"lng":-9.5822,"notes":"Town centre motorhome stopover with services. Good base for the Ring of Kerry and Beara Peninsula.","amenities":["water","waste","electric"],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167247303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0053","name":"Dingle Motorhome Parking","type":"site","cost":"paid","lat":52.1447,"lng":-10.2606,"notes":"Motorhome parking near Dingle town centre. Beautiful Dingle Peninsula location.","amenities":["water","waste"],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167246303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0054","name":"Donegal Town Motorhome Stopover","type":"site","cost":"paid","lat":54.6549,"lng":-8.1128,"notes":"Motorhome aire in Donegal town. Walking distance to castle and town centre.","amenities":["water","waste","electric"],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167245303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0055","name":"Bundoran Motorhome Parking","type":"site","cost":"free","lat":54.4776,"lng":-8.2793,"notes":"Motorhome parking near Bundoran seafront. Surf beach and town amenities nearby.","amenities":["water","waste"],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167244303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0056","name":"Kilkenny Motorhome Stopover","type":"site","cost":"paid","lat":52.6536,"lng":-7.2524,"notes":"Designated motorhome parking near Kilkenny city. Walking distance to the castle and medieval mile.","amenities":["water","waste","electric"],"ratingAvg":0,"ratingCount":0,"county":"Kilkenny","addedAt":1782167243303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0057","name":"Waterford City Motorhome Parking","type":"site","cost":"paid","lat":52.2593,"lng":-7.1101,"notes":"Motorhome parking near Waterford quays. Access to Viking Triangle and city centre.","amenities":["water","waste"],"ratingAvg":0,"ratingCount":0,"county":"Waterford","addedAt":1782167242303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0058","name":"Galway City Salthill Motorhome","type":"site","cost":"paid","lat":53.2589,"lng":-9.0784,"notes":"Motorhome stopover in Salthill with sea views. Easy access to Galway city.","amenities":["water","waste","electric"],"ratingAvg":0,"ratingCount":0,"county":"Galway","addedAt":1782167241303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0059","name":"Sligo Town Motorhome Stopover","type":"site","cost":"paid","lat":54.2688,"lng":-8.4761,"notes":"Town centre motorhome area in Sligo. Near Yeats country and Benbulben.","amenities":["water","waste","electric"],"ratingAvg":0,"ratingCount":0,"county":"Sligo","addedAt":1782167240303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0060","name":"Horn Head, Dunfanaghy","type":"site","cost":"free","lat":55.2042,"lng":-7.9522,"notes":"Wild Atlantic Way spectacular headland. No facilities but outstanding views. Arrive late, leave early. Narrow road.","amenities":[],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167239303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0061","name":"Mullaghderg Beach, Dungloe","type":"site","cost":"free","lat":54.9903,"lng":-8.3541,"notes":"Beautiful sandy beach overnight parking. Note: unsafe for swimming due to currents. Remote and peaceful.","amenities":[],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167238303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0062","name":"Silver Strand Beach, Malin Beg","type":"site","cost":"free","lat":54.6741,"lng":-8.7634,"notes":"Pristine beach with possibility to swim. Village of Glencolmcille 100m away. Sheep may wander nearby.","amenities":[],"ratingAvg":0,"ratingCount":0,"county":"Donegal","addedAt":1782167237303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0063","name":"Carrigafoyle Castle Parking","type":"site","cost":"free","lat":52.5699,"lng":-9.4951,"notes":"Quiet parking near historic castle at Ballylongford. Peaceful and within walking distance of the ruins.","amenities":[],"ratingAvg":0,"ratingCount":0,"county":"Kerry","addedAt":1782167236303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0064","name":"Hook Lighthouse Parking","type":"site","cost":"free","lat":52.125,"lng":-6.9301,"notes":"Spacious overnight parking at one of the world's oldest lighthouses. Sea views, daytime cafe and toilets accessible.","amenities":["toilets"],"ratingAvg":0,"ratingCount":0,"county":"Wexford","addedAt":1782167235303,"source":"Camping Ireland / OSM"},{"id":"osm-ie-0065","name":"St Mullins, River Barrow","type":"site","cost":"free","lat":52.4878,"lng":-6.9296,"notes":"Rural riverside location on the Barrow. Swimming, fishing and walking. Nearby cafe. Quiet and scenic.","amenities":[],"ratingAvg":0,"ratingCount":0,"county":"Carlow","addedAt":1782167234303,"source":"Camping Ireland / OSM"}];
+  }
+
+  // ── App init ──────────────────────────────────────────────────────────────
+
+  // Auto-init Firebase on load
+  initFirebase();
+
+  // ── Map ───────────────────────────────────────────────────────────────────
+
+  var map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://tiles.openfreemap.org/styles/liberty',
+    center: [-8.0, 53.35],
+    zoom: 6.5,
+    attributionControl: true
+  });
+
+  map.addControl(new maplibregl.NavigationControl({showCompass:false}), 'bottom-left');
+
+  // Map clicks handled by canvas listener in setupLayers
+
+  // ── Markers — native MapLibre layers (no HTML markers, no jumping) ──────────
+
+  var mapReady = false;
+  mapMarkers = {}; // kept for flyTo compatibility but unused for rendering
+
+  // We still need ONE HTML marker per spot for click detection — but we
+  // use transparent 1px elements so they never visually jump. The visual
+  // pin is drawn by MapLibre as a canvas layer.
+  // Actually: simplest correct approach is SVG symbol + GeoJSON layer.
+
+  function pinSVG(color){
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 38" width="30" height="38">' +
+      '<path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 23 15 23s15-12.5 15-23C30 6.7 23.3 0 15 0z" fill="' + color + '"/>' +
+      '<circle cx="15" cy="15" r="6" fill="rgba(255,255,255,0.35)"/>' +
+      '</svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+
+  function spotsToGeoJSON(list){
+    return {
+      type: 'FeatureCollection',
+      features: list.map(function(s){
+        var t = TYPES[s.type] || TYPES.site;
+        var isHighlyRated = s.ratingAvg >= 4 && s.ratingCount >= 1;
+        return {
+          type: 'Feature',
+          properties: {
+            id: s.id,
+            color: isHighlyRated ? '#D4AC0D' : t.color,
+            label: t.label,
+            name: s.name,
+            type: s.type,
+            rated: isHighlyRated ? 1 : 0
+          },
+          geometry: { type: 'Point', coordinates: [s.lng, s.lat] }
+        };
+      })
+    };
+  }
+
+  var PIN_COLORS = ['#2A6F77','#7B3F00','#5C6B73','#3C5A45','#D4AC0D'];
+  var PIN_NAMES  = ['site','pub','parking','other','rated'];
+
+  function loadPinImages(cb){
+    var loaded = 0;
+    var toLoad = PIN_NAMES.length;
+    var colors = {'site':'#2A6F77','pub':'#7B3F00','parking':'#5C6B73','other':'#3C5A45','rated':'#D4AC0D'};
+    PIN_NAMES.forEach(function(name){
+      if(map.hasImage('pin-'+name)){ loaded++; if(loaded===toLoad) cb(); return; }
+      var img = new Image(30, 38);
+      img.onload = function(){
+        if(!map.hasImage('pin-'+name)) map.addImage('pin-'+name, img);
+        loaded++;
+        if(loaded===toLoad) cb();
+      };
+      img.src = pinSVG(colors[name]);
+    });
+  }
+
+  function setupLayers(){
+    // Source
+    if(!map.getSource('spots')){
+      map.addSource('spots', {
+        type: 'geojson',
+        data: spotsToGeoJSON([]),
+        cluster: true,
+        clusterMaxZoom: 11,
+        clusterRadius: 44
+      });
+    }
+
+    // Cluster circles
+    if(!map.getLayer('clusters')){
+      map.addLayer({
+        id: 'clusters',
+        type: 'circle',
+        source: 'spots',
+        filter: ['has','point_count'],
+        paint: {
+          'circle-color': '#1B2420',
+          'circle-radius': ['step',['get','point_count'],22,5,28,20,34],
+          'circle-stroke-width': 3,
+          'circle-stroke-color': '#F4EFE3'
+        }
+      });
+    }
+
+    // Cluster count labels
+    if(!map.getLayer('cluster-count')){
+      map.addLayer({
+        id: 'cluster-count',
+        type: 'symbol',
+        source: 'spots',
+        filter: ['has','point_count'],
+        layout: {
+          'text-field': '{point_count_abbreviated}',
+          'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
+          'text-size': 13
+        },
+        paint: { 'text-color': '#F4EFE3' }
+      });
+    }
+
+    // Individual pins (unclustered)
+    if(!map.getLayer('unclustered-point')){
+      map.addLayer({
+        id: 'unclustered-point',
+        type: 'circle',
+        source: 'spots',
+        filter: ['!', ['has','point_count']],
+        paint: {
+          'circle-color': ['case',
+            ['==',['get','rated'],1], '#D4AC0D',
+            ['==',['get','type'],'site'],    '#2A6F77',
+            ['==',['get','type'],'pub'],     '#7B3F00',
+            ['==',['get','type'],'parking'], '#5C6B73',
+            '#3C5A45'
+          ],
+          'circle-radius': 11,
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#ffffff'
+        }
+      });
+    }
+
+    // Pin type emoji labels
+    if(!map.getLayer('unclustered-label')){
+      map.addLayer({
+        id: 'unclustered-label',
+        type: 'symbol',
+        source: 'spots',
+        filter: ['!', ['has','point_count']],
+        layout: {
+          'text-field': ['case',
+            ['==',['get','rated'],1], '★',
+            ['==',['get','type'],'site'],    '⛺',
+            ['==',['get','type'],'pub'],     '🍺',
+            ['==',['get','type'],'parking'], 'P',
+            '📍'
+          ],
+          'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
+          'text-size': 11,
+          'text-allow-overlap': true,
+          'text-ignore-placement': true
+        },
+        paint: { 'text-color': '#ffffff' }
+      });
+    }
+
+    // Cluster & pin click — direct canvas hit test (reliable on mobile)
+    map.getCanvas().addEventListener('click', function(e){
+      var rect = map.getCanvas().getBoundingClientRect();
+      var point = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+
+      // check clusters first
+      var clusterFeatures = map.queryRenderedFeatures(point, {layers:['clusters']});
+      if(clusterFeatures.length){
+        var clusterId = clusterFeatures[0].properties.cluster_id;
+        var coords = clusterFeatures[0].geometry.coordinates.slice();
+        map.getSource('spots').getClusterExpansionZoom(clusterId, function(err, zoom){
+          if(err) return;
+          map.easeTo({center: coords, zoom: zoom + 0.5, duration: 500});
+        });
+        return;
+      }
+
+      // check individual pins
+      var pinFeatures = map.queryRenderedFeatures(point, {layers:['unclustered-point']});
+      if(pinFeatures.length){
+        openDetail(pinFeatures[0].properties.id);
+        return;
+      }
+
+      // otherwise handle add mode
+      if(addMode){
+        var lngLat = map.unproject(point);
+        pendingLng = lngLat.lng;
+        pendingLat = lngLat.lat;
+        exitAddMode();
+        openAddSheet();
+      }
+    });
+
+    // Cursor changes
+    map.on('mouseenter','clusters',function(){ map.getCanvas().style.cursor='pointer'; });
+    map.on('mouseleave','clusters',function(){ map.getCanvas().style.cursor=''; });
+    map.on('mouseenter','unclustered-point',function(){ map.getCanvas().style.cursor='pointer'; });
+    map.on('mouseleave','unclustered-point',function(){ map.getCanvas().style.cursor=''; });
+
+    // flush any data that was waiting for layers to be ready
+    if(dataPending) updateMapData();
+  }
+
+  map.once('load', function(){
+    mapReady = true;
+    setupLayers();
+    updateMapData();
+  });
+
+  var dataPending = false;
+
+  function updateMapData(){
+    if(!mapReady){
+      dataPending = true;
+      return;
+    }
+    var source = map.getSource('spots');
+    if(!source){
+      dataPending = true;
+      return;
+    }
+    dataPending = false;
+    try {
+      source.setData(spotsToGeoJSON(filteredSpots()));
+    } catch(e){ console.warn('setData error:', e); }
+  }
+
+  function rebuildMarkers(){ updateMapData(); }
+  function safeRebuild(){ updateMapData(); }
+
+  // ── Rendering ─────────────────────────────────────────────────────────────
+
+  function filteredSpots(){
+    var list = spots;
+    if(activeFilter==='favourites') list = list.filter(function(s){ return !!favourites[s.id]; });
+    else if(activeFilter!=='all') list = list.filter(function(s){ return s.type === activeFilter; });
+    if(minStars > 0) list = list.filter(function(s){ return (s.ratingAvg||0) >= minStars && (s.ratingCount||0) > 0; });
+    return list;
+  }
+
+  function starsHTML(avg, count, size){
+    var full  = Math.round(avg);
+    var html  = '';
+    for(var i=1;i<=5;i++) html += '<span style="color:'+(i<=full?'#C97D2C':'#ccc')+';font-size:'+(size||16)+'px;">★</span>';
+    if(count>0) html += '<span style="font-size:11px;color:#8a948d;margin-left:4px;">('+count+')</span>';
+    return html;
+  }
+
+  function costLabel(c){ return c==='free'?'Free':c==='paid'?'Paid':'Cost unknown'; }
+
+  function renderList(){
+    var el = document.getElementById('listView');
+    var list = filteredSpots().slice().sort(function(a,b){ return (b.addedAt||0)-(a.addedAt||0); });
+    if(!list.length){
+      var msg = activeFilter === 'favourites'
+        ? '<div class="listEmpty"><div class="t">No favourites yet</div>Tap ❤️ on any spot to save it here.</div>'
+        : '<div class="listEmpty"><div class="t">Nothing here yet</div>Add the first spot from the map.</div>';
+      el.innerHTML = msg;
+      return;
+    }
+    el.innerHTML = list.map(function(s){
+      var t = TYPES[s.type]||TYPES.site;
+      var am = (s.amenities||[]).map(function(k){ var a=AMENITIES.find(function(x){return x.key===k;}); return a?'<span>'+a.label+'</span>':''; }).join('');
+      var murl = s.source
+        ? 'https://maps.google.com/maps/search/'+encodeURIComponent(s.name+(s.county?', Co. '+s.county+', Ireland':'')).replace(/%20/g,'+')
+        : 'https://maps.google.com/maps?q='+s.lat.toFixed(6)+','+s.lng.toFixed(6);
+      var isFav = !!favourites[s.id];
+      return '<div class="listCard" data-id="'+s.id+'">' +
+        '<span class="ttype" style="background:'+t.color+'">'+t.label+'</span>' +
+        (isFav ? '<span style="float:right;font-size:14px;">❤️</span>' : '') +
+        '<h3>'+esc(s.name)+'</h3>' +
+        (s.county?'<div style="font-size:11px;color:#6b7670;margin-bottom:4px;">Co. '+esc(s.county)+'</div>':'') +
+        '<div class="lmeta">'+s.lat.toFixed(4)+', '+s.lng.toFixed(4)+' — '+costLabel(s.cost)+'</div>' +
+        (s.notes?'<div class="lnotes">'+esc(s.notes)+'</div>':'') +
+        (am?'<div class="amlist">'+am+'</div>':'') +
+        ((s.ratingCount>0)?'<div class="lrating">'+starsHTML(s.ratingAvg,s.ratingCount,16)+'</div>':'') +
+        '<a class="directionsBtn" href="'+murl+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">▷ Get Directions</a>' +
+        '</div>';
+    }).join('');
+  }
+
+  function render(){
+    document.getElementById('countLabel').textContent = spots.length + (spots.length===1?' spot':' spots');
+    if(mapReady) updateMapData();
+    renderList();
+  }
+
+  // ── Detail sheet ──────────────────────────────────────────────────────────
+
+  var currentDetailId = null;
+
+  function openDetail(id){
+    var s = spots.find(function(x){ return x.id===id; });
+    if(!s) return;
+    currentDetailId = id;
+    var t = TYPES[s.type]||TYPES.site;
+    var am = (s.amenities||[]).map(function(k){ var a=AMENITIES.find(function(x){return x.key===k;}); return a?'<span>'+a.label+'</span>':''; }).join('');
+    var murl = s.source
+      ? 'https://maps.google.com/maps/search/'+encodeURIComponent(s.name+(s.county?', Co. '+s.county+', Ireland':'')).replace(/%20/g,'+')
+      : 'https://maps.google.com/maps?q='+s.lat.toFixed(6)+','+s.lng.toFixed(6);
+    var isFav = !!favourites[s.id];
+    var spotReviews = reviews[s.id] || [];
+
+    // Photo section
+    var photoHTML = '';
+    if(s.photoStatus === 'approved' && s.photoUrl){
+      photoHTML = '<img src="'+s.photoUrl+'" class="spotPhoto" alt="Photo of '+esc(s.name)+'"/>';
+    } else if(s.photoStatus === 'pending'){
+      photoHTML = '<div class="photoPending">📷 Photo submitted — pending review</div>';
+    }
+    var reviewsHTML = spotReviews.length
+      ? spotReviews.map(function(r, i){
+          return '<div class="reviewItem">' +
+            '<div class="rtext">'+esc(r.text)+'</div>' +
+            '<div class="rmeta">'+new Date(r.ts).toLocaleDateString('en-IE')+'</div>' +
+            (isAdmin ? '<button class="rdelete" onclick="deleteReview(\''+s.id+'\','+i+')">✕</button>' : '') +
+          '</div>';
+        }).join('')
+      : '<div style="font-size:12.5px;color:#8a948d;margin-bottom:8px;">No reviews yet — be the first!</div>';
+
+    document.getElementById('detailContent').innerHTML =
+      '<div class="ticket">' +
+      photoHTML +
+      '<span class="ttype" style="background:'+t.color+'">'+t.label+'</span>' +
+      '<h3>'+esc(s.name)+'</h3>' +
+      (s.notes?'<div class="tnotes">'+esc(s.notes)+'</div>':'') +
+      (am?'<div class="divider"></div><div class="amlist">'+am+'</div>':'') +
+      '<div class="tcost">'+costLabel(s.cost)+'</div>' +
+      '<div class="tcoords">'+s.lat.toFixed(5)+', '+s.lng.toFixed(5)+'</div>' +
+      ((s.ratingCount>0)?'<div class="trating">'+starsHTML(s.ratingAvg,s.ratingCount,20)+'</div>':'<div class="trating" style="color:#ccc;font-size:13px;">No ratings yet — be the first!</div>') +
+      '<button class="heartBtn'+(isFav?' hearted':'')+'" onclick="toggleFav(\''+s.id+'\')"><span class="hicon">'+(isFav?'❤️':'🤍')+'</span>'+(isFav?'Saved to favourites':'Save to favourites')+'</button>' +
+      '<a class="directionsBtn" href="'+murl+'" target="_blank" rel="noopener">▷ Get Directions in Google Maps</a>' +
+      '<div class="rateSection">' +
+        '<label>Rate this spot</label>' +
+        '<div class="rateStarsRow" id="rateStarsRow">' +
+          [1,2,3,4,5].map(function(n){ return '<button class="rateStarBtn" data-n="'+n+'" onclick="hoverRating('+n+')">★</button>'; }).join('') +
+        '</div>' +
+        '<button class="submitRatingBtn" id="submitRatingBtn" onclick="submitRating()" disabled>Submit rating</button>' +
+      '</div>' +
+      '<div class="reviewsSection">' +
+        '<span class="rlabel">Reviews</span>' +
+        reviewsHTML +
+        '<div class="writeReviewBox">' +
+          '<textarea id="reviewText" placeholder="Share your experience... (anonymous, max 280 characters)" maxlength="280" oninput="updateReviewCount()"></textarea>' +
+          '<div class="charCount"><span id="reviewCount">0</span>/280</div>' +
+          '<button class="submitReviewBtn" id="submitReviewBtn" onclick="submitReview()" disabled>Post review</button>' +
+        '</div>' +
+      '</div>' +
+      (isAdmin ? '<button class="deleteBtn" onclick="deleteSpot()">🗑 Delete this spot</button>' : '') +
+      ((!isAdmin && sessionSpotIds[s.id]) ? '<button class="deleteBtn" onclick="deleteSpot()">🗑 Remove spot I just added</button>' : '') +
+      '<button class="reportBtn" onclick="openReportSheet()">🚩 Report this spot</button>' +
+      '</div>';
+    document.getElementById('detailOverlay').classList.add('show');
+    document.getElementById('detailSheet').classList.add('show');
+  }
+
+  var pendingRating = 0;
+
+  window.toggleFav = function(id){
+    if(favourites[id]){
+      delete favourites[id];
+    } else {
+      favourites[id] = true;
+    }
+    saveFavourites();
+    // update button in place
+    var btn = document.querySelector('.heartBtn');
+    if(btn){
+      var isFav = !!favourites[id];
+      btn.classList.toggle('hearted', isFav);
+      btn.innerHTML = '<span class="hicon">'+(isFav?'❤️':'🤍')+'</span>'+(isFav?'Saved to favourites':'Save to favourites');
+    }
+    // update list if favourites filter active
+    if(activeFilter==='favourites') renderList();
+  };
+
+  window.updateReviewCount = function(){
+    var ta = document.getElementById('reviewText');
+    var btn = document.getElementById('submitReviewBtn');
+    if(!ta || !btn) return;
+    var len = ta.value.trim().length;
+    var counter = document.getElementById('reviewCount');
+    if(counter) counter.textContent = len;
+    btn.disabled = len < 3;
+  };
+
+  window.submitReview = function(){
+    if(!currentDetailId) return;
+    var ta = document.getElementById('reviewText');
+    if(!ta) return;
+    var text = ta.value.trim();
+    if(text.length < 3) return;
+    if(!reviews[currentDetailId]) reviews[currentDetailId] = [];
+    reviews[currentDetailId].push({text: text, ts: Date.now()});
+    saveReviews();
+    // sync to Firebase if connected
+    if(useFirebase && db){
+      db.collection('reviews').doc(currentDetailId).set({reviews: reviews[currentDetailId]}).catch(console.error);
+    }
+    // refresh detail sheet
+    var id = currentDetailId;
+    closeDetail();
+    setTimeout(function(){ openDetail(id); }, 100);
+  };
+
+  window.deleteReview = function(spotId, index){
+    if(!isAdmin) return;
+    if(!confirm('Delete this review?')) return;
+    if(reviews[spotId]){
+      reviews[spotId].splice(index, 1);
+      if(reviews[spotId].length === 0) delete reviews[spotId];
+      saveReviews();
+      if(useFirebase && db){
+        var payload = reviews[spotId] ? {reviews: reviews[spotId]} : {};
+        db.collection('reviews').doc(spotId).set(payload).catch(console.error);
+      }
+    }
+    var id = currentDetailId;
+    closeDetail();
+    setTimeout(function(){ openDetail(id); }, 100);
+  };
+
+  window.hoverRating = function(n){
+    pendingRating = n;
+    document.querySelectorAll('.rateStarBtn').forEach(function(b,i){
+      b.classList.toggle('active', i < n);
+    });
+    document.getElementById('submitRatingBtn').disabled = false;
+  };
+
+  window.submitRating = function(){
+    var s = spots.find(function(x){ return x.id===currentDetailId; });
+    if(!s || !pendingRating) return;
+    var oldCount = s.ratingCount||0;
+    var oldAvg   = s.ratingAvg||0;
+    var newCount = oldCount + 1;
+    var newAvg   = Math.round(((oldAvg * oldCount) + pendingRating) / newCount * 10) / 10;
+    s.ratingAvg  = newAvg;
+    s.ratingCount= newCount;
+
+    if(useFirebase){
+      updateRatingInFirebase(s.id, newAvg, newCount).catch(console.error);
+    } else {
+      saveLocalSpots();
+    }
+
+    // Update UI
+    var rateSection = document.querySelector('.rateSection');
+    if(rateSection) rateSection.innerHTML = '<div class="ratedMsg">★ Thanks for rating! ('+newAvg+' avg from '+newCount+' rating'+(newCount!==1?'s':'')+')</div>';
+    renderList();
+  };
+
+  window.deleteSpot = function(){
+    if(!currentDetailId) return;
+    var s = spots.find(function(x){ return x.id===currentDetailId; });
+    if(!s) return;
+    // check permission
+    if(!isAdmin && !sessionSpotIds[s.id]){
+      alert('You can only delete spots you added in this session.');
+      return;
+    }
+    if(!confirm('Delete "' + s.name + '"? This cannot be undone.')) return;
+    spots = spots.filter(function(x){ return x.id !== currentDetailId; });
+    delete sessionSpotIds[currentDetailId];
+    if(useFirebase && db){
+      db.collection('spots').doc(currentDetailId).delete().catch(console.error);
+    } else {
+      saveLocalSpots();
+    }
+    closeDetail();
+    render();
+  };
+
+  function closeDetail(){
+    document.getElementById('detailOverlay').classList.remove('show');
+    document.getElementById('detailSheet').classList.remove('show');
+    pendingRating = 0;
+    currentDetailId = null;
+  }
+  document.getElementById('detailOverlay').addEventListener('click', closeDetail);
+  document.getElementById('detailCloseBtn').addEventListener('click', closeDetail);
+  document.getElementById('detailSheetCloseBtn').addEventListener('click', closeDetail);
+
+  // list card tap -> jump to map + open detail
+  document.getElementById('listView').addEventListener('click', function(e){
+    var card = e.target.closest('.listCard');
+    if(!card) return;
+    var id = card.getAttribute('data-id');
+    var s = spots.find(function(x){ return x.id===id; });
+    if(!s) return;
+    showMapView();
+    map.flyTo({center:[s.lng, s.lat], zoom:13, duration:600});
+    setTimeout(function(){ openDetail(id); }, 700);
+  });
+
+  // ── Chips ────────────────────────────────────────────────────────────────
+
+  function buildChips(){
+    var wrap = document.getElementById('chips');
+    var all = [
+      {key:'all', label:'All', color:'#F4EFE3', letter:null},
+      {key:'favourites', label:'My Favourites', color:'#e74c3c', letter:'❤️'}
+    ].concat(
+      Object.keys(TYPES).map(function(k){ return {key:k, label:TYPES[k].label, color:TYPES[k].color, letter:TYPES[k].letter}; })
+    );
+    wrap.innerHTML = all.map(function(c){
+      var icon = c.letter
+        ? '<span style="font-size:13px;line-height:1;">' + c.letter + '</span>'
+        : '<span class="dot" style="background:' + c.color + '"></span>';
+      return '<button class="chip' + (c.key===activeFilter?' active':'') + '" data-key="' + c.key + '">' + icon + c.label + '</button>';
+    }).join('');
+    wrap.querySelectorAll('.chip').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        activeFilter = btn.getAttribute('data-key');
+        wrap.querySelectorAll('.chip').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        render();
+      });
+    });
+  }
+
+  function buildStarChips(){
+    var wrap = document.getElementById('starChips');
+    var options = [
+      {n:0, label:'Any rating'},
+      {n:3, label:'3★ +'},
+      {n:4, label:'4★ +'},
+      {n:5, label:'5★ only'},
+    ];
+    wrap.innerHTML = options.map(function(o){
+      var stars = o.n > 0 ? o.label : o.label;
+      return '<button class="chip'+(minStars===o.n?' active':'')+'" data-stars="'+o.n+'">'+stars+'</button>';
+    }).join('');
+    wrap.querySelectorAll('.chip').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        minStars = parseInt(btn.getAttribute('data-stars'));
+        wrap.querySelectorAll('.chip').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        render();
+      });
+    });
+  }
+
+  // ── View toggle ───────────────────────────────────────────────────────────
+
+  function showMapView(){
+    document.getElementById('listView').classList.remove('show');
+    document.getElementById('toList').classList.remove('active');
+    document.getElementById('toMap').classList.add('active');
+    setTimeout(function(){ map.resize(); if(mapReady) safeRebuild(); }, 50);
+  }
+  function showListView(){
+    document.getElementById('listView').classList.add('show');
+    document.getElementById('toMap').classList.remove('active');
+    document.getElementById('toList').classList.add('active');
+  }
+  document.getElementById('toMap').addEventListener('click', showMapView);
+  document.getElementById('toList').addEventListener('click', showListView);
+
+  // ── Add spot flow ─────────────────────────────────────────────────────────
+
+  var fab = document.getElementById('fab');
+  var addBanner = document.getElementById('addBanner');
+
+  fab.addEventListener('click', function(){
+    if(addMode){ exitAddMode(); return; }
+    addMode = true;
+    addBanner.classList.add('show');
+    fab.classList.add('cancel');
+    fab.textContent = '✕ Cancel';
+    showMapView();
+    map.getCanvas().style.cursor = 'crosshair';
+  });
+  document.getElementById('cancelAdd').addEventListener('click', exitAddMode);
+
+  function exitAddMode(){
+    addMode = false;
+    addBanner.classList.remove('show');
+    fab.classList.remove('cancel');
+    fab.textContent = '+ Add spot';
+    map.getCanvas().style.cursor = '';
+  }
+
+  function buildTypeGrid(){
+    var wrap = document.getElementById('typeGrid');
+    wrap.innerHTML = Object.keys(TYPES).map(function(k){
+      var t = TYPES[k];
+      return '<div class="typeOpt'+(k===selectedType?' selected':'')+'\" data-key="'+k+'">' +
+        '<span style="font-size:18px;line-height:1;">'+t.letter+'</span>' +
+        '<span>'+t.label+'</span>' +
+        '</div>';
+    }).join('');
+    wrap.querySelectorAll('.typeOpt').forEach(function(opt){
+      opt.addEventListener('click', function(){
+        selectedType = opt.getAttribute('data-key');
+        wrap.querySelectorAll('.typeOpt').forEach(function(o){ o.classList.remove('selected'); });
+        opt.classList.add('selected');
+      });
+    });
+  }
+
+  function buildAmenities(){
+    var wrap = document.getElementById('amenities');
+    wrap.innerHTML = AMENITIES.map(function(a){
+      return '<div class="amenity" data-key="'+a.key+'">'+a.label+'</div>';
+    }).join('');
+    wrap.querySelectorAll('.amenity').forEach(function(el){
+      el.addEventListener('click', function(){
+        var k = el.getAttribute('data-key');
+        selectedAmenities[k] = !selectedAmenities[k];
+        el.classList.toggle('selected', !!selectedAmenities[k]);
+      });
+    });
+  }
+
+  function buildStars(){
+    var wrap = document.getElementById('starsRow');
+    wrap.innerHTML = [1,2,3,4,5].map(function(n){
+      return '<button class="starBtn" data-n="'+n+'">★</button>';
+    }).join('');
+    wrap.querySelectorAll('.starBtn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        selectedRating = parseInt(btn.getAttribute('data-n'));
+        wrap.querySelectorAll('.starBtn').forEach(function(b){ b.classList.toggle('active', parseInt(b.getAttribute('data-n')) <= selectedRating); });
+      });
+    });
+  }
+
+  document.querySelectorAll('#costRow .costOpt').forEach(function(opt){
+    opt.addEventListener('click', function(){
+      selectedCost = opt.getAttribute('data-cost');
+      document.querySelectorAll('#costRow .costOpt').forEach(function(o){ o.classList.remove('selected'); });
+      opt.classList.add('selected');
+    });
+  });
+
+  document.getElementById('fName').addEventListener('input', function(){
+    document.getElementById('saveBtn').disabled = !this.value.trim();
+  });
+
+  var selectedPhotoFile = null;
+
+  // Photo preview
+  document.getElementById('fPhoto').addEventListener('change', function(){
+    var file = this.files[0];
+    if(!file) return;
+    if(file.size > 10 * 1024 * 1024){ alert('Photo must be under 10MB.'); this.value=''; return; }
+    selectedPhotoFile = file;
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var preview = document.getElementById('photoPreview');
+      preview.src = e.target.result;
+      preview.style.display = 'block';
+      document.getElementById('photoStatus').textContent = '📷 Photo ready — will be reviewed before going live';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  function openAddSheet(){
+    document.getElementById('coordsLabel').textContent = pendingLat.toFixed(5) + ', ' + pendingLng.toFixed(5);
+    document.getElementById('fName').value = '';
+    document.getElementById('fNotes').value = '';
+    document.getElementById('fPhoto').value = '';
+    document.getElementById('photoPreview').style.display = 'none';
+    document.getElementById('photoStatus').textContent = '';
+    selectedPhotoFile = null;
+    selectedType = 'site'; selectedCost = 'free'; selectedAmenities = {}; selectedRating = 0;
+    buildTypeGrid(); buildAmenities(); buildStars();
+    document.querySelectorAll('#costRow .costOpt').forEach(function(o){ o.classList.toggle('selected', o.getAttribute('data-cost')==='free'); });
+    document.getElementById('saveBtn').disabled = true;
+    document.getElementById('addOverlay').classList.add('show');
+    document.getElementById('addSheet').classList.add('show');
+  }
+  function closeAddSheet(){
+    document.getElementById('addOverlay').classList.remove('show');
+    document.getElementById('addSheet').classList.remove('show');
+  }
+  document.getElementById('addOverlay').addEventListener('click', confirmCloseAddSheet);
+
+  document.getElementById('addSheetCloseBtn').addEventListener('click', confirmCloseAddSheet);
+
+  function confirmCloseAddSheet(){
+    var name = document.getElementById('fName').value.trim();
+    var notes = document.getElementById('fNotes').value.trim();
+    var hasData = name || notes || selectedPhotoFile;
+    if(hasData){
+      if(!confirm('Are you sure you want to close? Any information you have entered will be lost.')) return;
+    }
+    closeAddSheet();
+  }
+
+  document.getElementById('saveBtn').addEventListener('click', function(){
+    var name = document.getElementById('fName').value.trim();
+    if(!name) return;
+    var spot = {
+      id: 'spot_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+      name: name, type: selectedType, cost: selectedCost,
+      lat: pendingLat, lng: pendingLng,
+      notes: document.getElementById('fNotes').value.trim(),
+      amenities: Object.keys(selectedAmenities).filter(function(k){ return selectedAmenities[k]; }),
+      ratingAvg: selectedRating || 0,
+      ratingCount: selectedRating ? 1 : 0,
+      photoStatus: selectedPhotoFile ? 'pending' : 'none',
+      photoUrl: null,
+      addedAt: Date.now()
+    };
+    spots.unshift(spot);
+    sessionSpotIds[spot.id] = true;
+    render();
+    closeAddSheet();
+
+    if(useFirebase){
+      saveToFirebase(spot).then(function(){
+        if(selectedPhotoFile && storage){
+          uploadPhoto(spot.id, selectedPhotoFile);
+        }
+      }).catch(console.error);
+    } else {
+      saveLocalSpots();
+    }
+    selectedPhotoFile = null;
+  });
+
+  // ── Photo upload ──────────────────────────────────────────────────────────
+
+  function compressImage(file, maxWidth, quality, cb){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var img = new Image();
+      img.onload = function(){
+        var canvas = document.createElement('canvas');
+        var scale = Math.min(1, maxWidth / img.width);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(function(blob){ cb(blob); }, 'image/jpeg', quality);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function uploadPhoto(spotId, file){
+    compressImage(file, 1200, 0.75, function(blob){
+      var ref = storage.ref('spots/' + spotId + '/photo.jpg');
+      ref.put(blob, {contentType:'image/jpeg'}).then(function(){
+        // save pending record to Firestore for moderation
+        if(db){
+          db.collection('photo_queue').doc(spotId).set({
+            spotId: spotId,
+            submittedAt: Date.now(),
+            status: 'pending'
+          }).catch(console.error);
+        }
+      }).catch(function(e){ console.error('Photo upload failed:', e); });
+    });
+  }
+
+  // ── Admin moderation queue ────────────────────────────────────────────────
+
+  // ── Report system ─────────────────────────────────────────────────────────
+
+  var selectedReportReason = null;
+
+  function openReportSheet(){
+    selectedReportReason = null;
+    document.getElementById('reportNote').value = '';
+    document.getElementById('submitReportBtn').disabled = true;
+    document.querySelectorAll('.reportReason').forEach(function(b){ b.classList.remove('selected'); });
+    document.getElementById('reportOverlay').classList.add('show');
+    document.getElementById('reportSheet').classList.add('show');
+  }
+  window.openReportSheet = openReportSheet;
+
+  function closeReportSheet(){
+    document.getElementById('reportOverlay').classList.remove('show');
+    document.getElementById('reportSheet').classList.remove('show');
+  }
+  document.getElementById('reportOverlay').addEventListener('click', closeReportSheet);
+  document.getElementById('reportCloseBtn').addEventListener('click', closeReportSheet);
+
+  document.querySelectorAll('.reportReason').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      selectedReportReason = btn.getAttribute('data-reason');
+      document.querySelectorAll('.reportReason').forEach(function(b){ b.classList.remove('selected'); });
+      btn.classList.add('selected');
+      document.getElementById('submitReportBtn').disabled = false;
+    });
+  });
+
+  document.getElementById('submitReportBtn').addEventListener('click', function(){
+    if(!selectedReportReason || !currentDetailId) return;
+    var s = spots.find(function(x){ return x.id === currentDetailId; });
+    var report = {
+      spotId: currentDetailId,
+      spotName: s ? s.name : currentDetailId,
+      reason: selectedReportReason,
+      note: document.getElementById('reportNote').value.trim(),
+      reportedAt: Date.now(),
+      status: 'pending'
+    };
+    if(db){
+      db.collection('reports').add(report).catch(console.error);
+    }
+    closeReportSheet();
+    alert('✅ Thank you — your report has been submitted.');
+  });
+
+  // ── Admin reports queue ───────────────────────────────────────────────────
+
+  function openReportsQueue(){
+    document.getElementById('reportsOverlay').classList.add('show');
+    document.getElementById('reportsSheet').classList.add('show');
+    loadReportsQueue();
+  }
+
+  function closeReportsQueue(){
+    document.getElementById('reportsOverlay').classList.remove('show');
+    document.getElementById('reportsSheet').classList.remove('show');
+  }
+  document.getElementById('reportsOverlay').addEventListener('click', closeReportsQueue);
+  document.getElementById('reportsCloseBtn').addEventListener('click', closeReportsQueue);
+  document.getElementById('reportsCloseBtn2').addEventListener('click', closeReportsQueue);
+
+  function loadReportsQueue(){
+    var el = document.getElementById('reportsQueue');
+    if(!db){ el.innerHTML = '<p style="font-size:13px;color:#6b7670;text-align:center;">Firebase not connected.</p>'; return; }
+    el.innerHTML = '<p style="font-size:13px;color:#6b7670;text-align:center;">Loading…</p>';
+    db.collection('reports').where('status','==','pending').orderBy('reportedAt','desc').get()
+      .then(function(snap){
+        if(snap.empty){
+          el.innerHTML = '<p style="font-size:13px;color:var(--moss);text-align:center;padding:20px 0;">✅ No reports pending.</p>';
+          return;
+        }
+        var html = '';
+        snap.forEach(function(doc){
+          var r = doc.data();
+          var d = new Date(r.reportedAt).toLocaleDateString('en-IE');
+          html += '<div class="reportItem" data-rid="'+doc.id+'" data-sid="'+r.spotId+'">' +
+            '<div class="riName">'+esc(r.spotName)+'</div>' +
+            '<div class="riReason">'+esc(r.reason)+'</div>' +
+            (r.note ? '<div class="riNote">"'+esc(r.note)+'"</div>' : '') +
+            '<div class="riDate">Reported '+d+'</div>' +
+            '<div class="reportActions">' +
+            '<button class="reportRemove" onclick="adminRemoveSpot(\''+doc.id+'\',\''+r.spotId+'\')">🗑 Remove spot</button>' +
+            '<button class="reportDismiss" onclick="adminDismissReport(\''+doc.id+'\')">✓ Dismiss</button>' +
+            '</div></div>';
+        });
+        el.innerHTML = html;
+      }).catch(function(e){
+        el.innerHTML = '<p style="font-size:13px;color:#c0392b;text-align:center;">'+e.message+'</p>';
+      });
+  }
+
+  window.adminRemoveSpot = function(reportId, spotId){
+    if(!confirm('Remove this spot and dismiss the report?')) return;
+    // delete spot
+    spots = spots.filter(function(x){ return x.id !== spotId; });
+    if(db){
+      db.collection('spots').doc(spotId).delete().catch(console.error);
+      db.collection('reports').doc(reportId).update({status:'resolved'}).catch(console.error);
+    }
+    render();
+    var el = document.querySelector('.reportItem[data-rid="'+reportId+'"]');
+    if(el) el.remove();
+    if(!document.querySelector('.reportItem')){
+      document.getElementById('reportsQueue').innerHTML = '<p style="font-size:13px;color:var(--moss);text-align:center;padding:20px 0;">✅ All clear!</p>';
+    }
+  };
+
+  window.adminDismissReport = function(reportId){
+    if(db) db.collection('reports').doc(reportId).update({status:'dismissed'}).catch(console.error);
+    var el = document.querySelector('.reportItem[data-rid="'+reportId+'"]');
+    if(el) el.remove();
+    if(!document.querySelector('.reportItem')){
+      document.getElementById('reportsQueue').innerHTML = '<p style="font-size:13px;color:var(--moss);text-align:center;padding:20px 0;">✅ All clear!</p>';
+    }
+  };
+
+  // ── Utilities ─────────────────────────────────────────────────────────────
+
+  function esc(str){
+    var d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+
+  buildChips();
+  buildStarChips();
+  loadSpots();
+
+})();
+</script>
+</body>
+</html>
