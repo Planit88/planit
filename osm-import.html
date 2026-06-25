@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Planit — OSM Import Tool</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#1B2420;color:#F4EFE3;padding:20px;max-width:600px;margin:0 auto;}
+  h1{font-size:22px;font-weight:800;margin-bottom:4px;color:#F4EFE3;}
+  .sub{font-size:13px;color:#8a948d;margin-bottom:24px;}
+  .card{background:#243029;border-radius:12px;padding:18px;margin-bottom:16px;}
+  .card h2{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#8a948d;margin-bottom:10px;}
+  .status{font-size:13px;line-height:1.6;min-height:60px;color:#F4EFE3;}
+  .status .ok{color:#6BBF8E;}
+  .status .err{color:#e74c3c;}
+  .status .info{color:#C97D2C;}
+  .btn{display:block;width:100%;background:#C97D2C;color:#fff;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:12px;}
+  .btn:disabled{opacity:0.4;cursor:not-allowed;}
+  .btn.secondary{background:#3C5A45;}
+  .progress{background:#1B2420;border-radius:8px;height:8px;margin:10px 0;overflow:hidden;}
+  .progress-bar{height:100%;background:#C97D2C;border-radius:8px;transition:width 0.3s;width:0%;}
+  .count{font-size:32px;font-weight:800;color:#6BBF8E;margin:4px 0;}
+  .small{font-size:11px;color:#6b7670;margin-top:8px;}
+</style>
+</head>
+<body>
+
+<h1>Planit OSM Import</h1>
+<p class="sub">Import campsites & motorhome spots from OpenStreetMap into your Firebase database</p>
+
+<div class="card">
+  <h2>Status</h2>
+  <div class="status" id="status">Ready to import. Tap the button below to start.</div>
+  <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+</div>
+
+<div class="card">
+  <h2>Results</h2>
+  <div class="count" id="count">0</div>
+  <div class="status" id="results">No spots imported yet.</div>
+</div>
+
+<button class="btn" id="importBtn" onclick="startImport()">🗺 Import from OpenStreetMap</button>
+<button class="btn secondary" id="fixBtn" onclick="fixExistingData()">🔧 Fix existing spots (cost + county)</button>
+<button class="btn secondary" id="clearBtn" onclick="clearImported()" disabled>🗑 Remove imported OSM spots</button>
+
+<p class="small">This tool queries OpenStreetMap for campsites, caravan parks and motorhome stops across Ireland and adds them directly to your Planit Firebase database. OpenStreetMap data is licensed under ODbL — free to use with attribution (already shown in the app).</p>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCBrp6KbNAm8f0WfSOncklep_XIniNrguI",
+  authDomain: "planit-aea59.firebaseapp.com",
+  projectId: "planit-aea59",
+  storageBucket: "planit-aea59.firebasestorage.app",
+  messagingSenderId: "432096207493",
+  appId: "1:432096207493:web:a0ccc45dd069360d1bffec"
+};
+
+if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+var db = firebase.firestore();
+
+function setStatus(msg, type){
+  var el = document.getElementById('status');
+  el.innerHTML = '<span class="'+(type||'info')+'">'+msg+'</span>';
+}
+
+function setProgress(pct){
+  document.getElementById('progressBar').style.width = pct + '%';
+}
+
+function setCount(n){
+  document.getElementById('count').textContent = n;
+}
+
+// OSM Overpass query for Ireland
+var OVERPASS_QUERY = `
+[out:json][timeout:60];
+(
+  node["tourism"="camp_site"](51.2,-10.7,55.6,-5.2);
+  way["tourism"="camp_site"](51.2,-10.7,55.6,-5.2);
+  node["tourism"="caravan_site"](51.2,-10.7,55.6,-5.2);
+  way["tourism"="caravan_site"](51.2,-10.7,55.6,-5.2);
+  node["amenity"="parking"]["motorhome"="yes"](51.2,-10.7,55.6,-5.2);
+  node["tourism"="camp_pitch"](51.2,-10.7,55.6,-5.2);
+  node["leisure"="nature_reserve"]["motorhome"="yes"](51.2,-10.7,55.6,-5.2);
+);
+out center;
+`;
+
+function parseAmenities(tags){
+  var amenities = [];
+  if(tags.drinking_water === 'yes' || tags.water === 'yes' || tags['drinking_water'] === 'yes') amenities.push('water');
+  if(tags.sanitary_dump_station === 'yes' || tags.waste_disposal === 'yes' || tags['motorhome:waste_water'] === 'yes') amenities.push('waste');
+  if(tags.electric_hookup === 'yes' || tags.power_supply === 'yes' || tags['hookup'] === 'electric' || tags['electrical_hookup'] === 'yes') amenities.push('electric');
+  if(tags.toilets === 'yes' || tags['toilets:disposal'] || tags['sanitary_facilities'] === 'yes') amenities.push('toilets');
+  if(tags.shower === 'yes' || tags.showers === 'yes' || tags['hot_water'] === 'yes') amenities.push('showers');
+  if(tags.internet_access === 'wlan' || tags.wifi === 'yes' || tags['internet_access'] === 'yes') amenities.push('wifi');
+  if(tags.dog === 'yes' || tags['dog'] === 'leashed' || tags['dogs'] === 'yes' || tags['pets_allowed'] === 'yes') amenities.push('dogs');
+  if(tags.restaurant === 'yes' || tags.cafe === 'yes' || tags['food'] === 'yes') amenities.push('food');
+  return amenities;
+}
+
+function parseType(tags){
+  if(tags.tourism === 'camp_site') return 'site';
+  if(tags.tourism === 'caravan_site') return 'site';
+  if(tags.amenity === 'parking') return 'parking';
+  return 'site';
+}
+
+function parseCost(tags){
+  if(tags.fee === 'no' || tags.access === 'free' || tags['fee'] === 'no') return 'free';
+  return 'paid'; // default to paid — most campsites charge
+}
+
+function parseCounty(tags){
+  // Try various OSM county/address tags
+  var county = tags['addr:county'] || tags['addr:state'] || tags['is_in:county'] || tags['is_in'] || '';
+  // Clean up common formats
+  if(county) {
+    county = county.replace('County ', '').replace(' County', '').replace(', Ireland', '').trim();
+    // Extract just the county if it's part of a longer string
+    var parts = county.split(',');
+    if(parts.length > 1) county = parts[0].trim();
+  }
+  return county;
+}
+
+async function startImport(){
+  var btn = document.getElementById('importBtn');
+  btn.disabled = true;
+  setProgress(0);
+  setStatus('Querying OpenStreetMap...', 'info');
+
+  try {
+    // Try multiple Overpass endpoints
+    var endpoints = [
+      'https://overpass-api.de/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter',
+      'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
+    ];
+
+    var data = null;
+    for(var i = 0; i < endpoints.length; i++){
+      try {
+        setStatus('Trying endpoint ' + (i+1) + ' of ' + endpoints.length + '...', 'info');
+        var resp = await fetch(endpoints[i], {
+          method: 'POST',
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: 'data=' + encodeURIComponent(OVERPASS_QUERY)
+        });
+        if(resp.ok){
+          data = await resp.json();
+          setStatus('✓ Connected to OpenStreetMap', 'ok');
+          break;
+        }
+      } catch(e){
+        console.log('Endpoint ' + endpoints[i] + ' failed:', e.message);
+      }
+    }
+
+    if(!data){
+      setStatus('❌ Could not connect to OpenStreetMap. Please try again later.', 'err');
+      btn.disabled = false;
+      return;
+    }
+
+    setProgress(30);
+    setStatus('Processing ' + data.elements.length + ' elements...', 'info');
+
+    // Filter to Ireland only (rough bounding box, exclude NI border areas)
+    var elements = data.elements.filter(function(el){
+      var lat = el.lat || (el.center && el.center.lat);
+      var lng = el.lon || (el.center && el.center.lon);
+      if(!lat || !lng) return false;
+      // Ireland mainland (excludes most of NI but keeps border counties)
+      return lat >= 51.4 && lat <= 55.4 && lng >= -10.7 && lng <= -5.9;
+    });
+
+    setStatus('Found ' + elements.length + ' spots in Ireland. Checking for duplicates...', 'info');
+    setProgress(40);
+
+    // Get existing OSM spot IDs from Firebase
+    var existingSnap = await db.collection('spots').where('source','==','osm').get();
+    var existingOsmIds = {};
+    existingSnap.forEach(function(doc){
+      var d = doc.data();
+      if(d.osmId) existingOsmIds[d.osmId] = true;
+    });
+
+    setProgress(55);
+
+    // Build spots to import
+    var toImport = [];
+    elements.forEach(function(el){
+      var tags = el.tags || {};
+      var name = tags.name || tags['name:en'] || tags['official_name'];
+      if(!name) return; // skip unnamed spots
+      if(name.length < 3) return;
+
+      var lat = el.lat || (el.center && el.center.lat);
+      var lng = el.lon || (el.center && el.center.lon);
+      if(!lat || !lng) return;
+
+      var osmId = String(el.type) + String(el.id);
+      if(existingOsmIds[osmId]) return; // already imported
+
+      var spot = {
+        id: 'osm-' + osmId,
+        osmId: osmId,
+        name: name,
+        type: parseType(tags),
+        cost: parseCost(tags),
+        lat: Math.round(lat * 100000) / 100000,
+        lng: Math.round(lng * 100000) / 100000,
+        notes: tags.description || tags.note || '',
+        amenities: parseAmenities(tags),
+        county: parseCounty(tags),
+        ratingAvg: 0,
+        ratingCount: 0,
+        photoStatus: 'none',
+        photoUrl: null,
+        source: 'osm',
+        addedAt: Date.now()
+      };
+      toImport.push(spot);
+    });
+
+    setStatus('Importing ' + toImport.length + ' new spots to Firebase...', 'info');
+    setProgress(60);
+
+    if(toImport.length === 0){
+      setStatus('✓ No new spots to import — all already in database.', 'ok');
+      setProgress(100);
+      btn.disabled = false;
+      return;
+    }
+
+    // Write in batches of 500 (Firestore limit)
+    var batchSize = 400;
+    var imported = 0;
+    for(var j = 0; j < toImport.length; j += batchSize){
+      var batch = db.batch();
+      var slice = toImport.slice(j, j + batchSize);
+      slice.forEach(function(spot){
+        batch.set(db.collection('spots').doc(spot.id), spot);
+      });
+      await batch.commit();
+      imported += slice.length;
+      setCount(imported);
+      setProgress(60 + Math.round((imported / toImport.length) * 38));
+      setStatus('Importing... ' + imported + ' of ' + toImport.length, 'info');
+    }
+
+    setProgress(100);
+    setStatus('✅ Done! ' + imported + ' spots imported from OpenStreetMap.', 'ok');
+    document.getElementById('results').innerHTML = '<span class="ok">Successfully added ' + imported + ' new spots to Planit. Open the app to see them on the map.</span>';
+    document.getElementById('clearBtn').disabled = false;
+
+  } catch(e) {
+    setStatus('❌ Error: ' + e.message, 'err');
+    console.error(e);
+  }
+
+  btn.disabled = false;
+}
+
+async function fixExistingData(){
+  var btn = document.getElementById('fixBtn');
+  btn.disabled = true;
+  setStatus('Fixing existing spots...', 'info');
+  try {
+    // Get all spots with unknown cost
+    var snap = await db.collection('spots').where('cost','==','unknown').get();
+    var count = 0;
+    var batchSize = 400;
+    var docs = [];
+    snap.forEach(function(doc){ docs.push(doc); });
+
+    for(var i = 0; i < docs.length; i += batchSize){
+      var batch = db.batch();
+      docs.slice(i, i + batchSize).forEach(function(doc){
+        batch.update(doc.ref, {cost: 'paid'});
+        count++;
+      });
+      await batch.commit();
+    }
+
+    setStatus('✅ Fixed ' + count + ' spots — cost unknown → paid.', 'ok');
+    setCount(count);
+  } catch(e){
+    setStatus('❌ Error: ' + e.message, 'err');
+  }
+  btn.disabled = false;
+}
+
+async function clearImported(){
+  if(!confirm('Remove all OSM-imported spots from Firebase? This cannot be undone.')) return;
+  var btn = document.getElementById('clearBtn');
+  btn.disabled = true;
+  setStatus('Removing OSM spots...', 'info');
+  try {
+    var snap = await db.collection('spots').where('source','==','osm').get();
+    var batch = db.batch();
+    var count = 0;
+    snap.forEach(function(doc){
+      batch.delete(doc.ref);
+      count++;
+      if(count % 400 === 0){
+        batch.commit();
+        batch = db.batch();
+      }
+    });
+    await batch.commit();
+    setStatus('✅ Removed ' + count + ' OSM spots.', 'ok');
+    setCount(0);
+  } catch(e){
+    setStatus('❌ Error: ' + e.message, 'err');
+  }
+}
+
+</script>
+</body>
+</html>
